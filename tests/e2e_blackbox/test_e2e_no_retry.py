@@ -1,12 +1,14 @@
 import time
 import requests
 import pytest
-from urllib.parse import parse_qs, unquote_plus
+
+from tests.utils.http_payload import parse_event_body
+
+pytestmark = pytest.mark.e2e
 
 
-@pytest.mark.e2e
 def test_e2e_no_retry_on_http_500(
-    adb, mock_base, mock_reset, mock_counter, get_latest_event, wait_for_event
+    event_trigger, mock_base, mock_reset, mock_counter, get_latest_event, wait_for_event
 ):
     """
     E2E-010: Webhook 返回 500 时，不发生重试（观测：事件只出现 1 次）
@@ -21,8 +23,7 @@ def test_e2e_no_retry_on_http_500(
     before = mock_counter()
 
     marker = "[E2E] no-retry-500"
-    r = adb.send_sms("10086", f"{marker} hello")
-    assert r.returncode == 0, r.stderr
+    result = event_trigger.send_sms("10086", f"{marker} hello", allow_fail=True)
 
     # 2) 等到第一次 webhook 到达（哪怕是 500，也会被记录为一次 events）
     ok = wait_for_event(before_count=before, timeout_s=12)
@@ -33,17 +34,17 @@ def test_e2e_no_retry_on_http_500(
     after = mock_counter()
     assert (
         after == before + 1
-    ), f"expected no retry on 500, before={before}, after={after}"
+    ), f"expected no retry on 500 (mode={result.mode}), before={before}, after={after}"
 
     # 4) 黑盒断言：payload 必须包含 marker
 
     event = get_latest_event()
-    assert marker in (event["body_form"] or {}).get("content", "")
+    body_text, body_json, form = parse_event_body(event)
+    assert marker in body_text
 
 
-@pytest.mark.e2e
 def test_e2e_no_retry_on_timeout(
-    adb, mock_base, mock_reset, mock_counter, get_latest_event, wait_for_event
+    event_trigger, mock_base, mock_reset, mock_counter, get_latest_event, wait_for_event
 ):
     """
     E2E-011: Webhook 超时/慢响应时，不发生重试（观测：事件只出现 1 次）
@@ -60,8 +61,7 @@ def test_e2e_no_retry_on_timeout(
     before = mock_counter()
 
     marker = "[E2E] no-retry-timeout"
-    r = adb.send_sms("10086", f"{marker} hello")
-    assert r.returncode == 0, r.stderr
+    result = event_trigger.send_sms("10086", f"{marker} hello", allow_fail=True)
 
     # delay=10s，等事件出现要更久一点
     ok = wait_for_event(before_count=before, timeout_s=20)
@@ -71,7 +71,8 @@ def test_e2e_no_retry_on_timeout(
     after = mock_counter()
     assert (
         after == before + 1
-    ), f"expected no retry on timeout, before={before}, after={after}"
+    ), f"expected no retry on timeout (mode={result.mode}), before={before}, after={after}"
 
     event = get_latest_event()
-    assert marker in (event["body_form"] or {}).get("content", "")
+    body_text, body_json, form = parse_event_body(event)
+    assert marker in body_text

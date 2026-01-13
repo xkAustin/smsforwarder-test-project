@@ -60,3 +60,19 @@
 测试设备：AVD Medium Phone
 系统：Android 16.0
 自动化环境：Python 3.14.2, pytest 9.0.2, requests 2.32.5, mock 5.2.0
+
+## 自动触发策略
+
+测试统一通过触发器发送短信或 HTTP 请求：
+
+- 默认 `TRIGGER_MODE=auto`：优先走 HTTP（稳定、可迁移）。
+- `TRIGGER_MODE=adb`：强制走 ADB（配合 `TRIGGER_STRICT=1` 可避免意外退化）。
+- `TRIGGER_PREFER_ADB=1`：在 auto 模式下优先走 ADB。
+- `TRIGGER_MODE=http`：直接 HTTP 触发（适合无设备环境）。
+- `TRIGGER_MODE=manual`：需要人工触发（用于真机/现场验证）。
+
+相关环境变量：
+
+- `TRIGGER_MODE` / `TRIGGER_STRICT` / `TRIGGER_PREFER_ADB`
+- `ALLOW_DEVICE_SMS`（允许对真机进行 best-effort 注入）
+- `SMS_INJECT_MODE`（local/mac_cmd/ssh）

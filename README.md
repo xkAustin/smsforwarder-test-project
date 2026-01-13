@@ -34,3 +34,23 @@
 ## 使用说明
 
 详细的测试说明与目录解释请查看 `tests/README.md`
+
+## 快速运行
+
+全量测试：
+
+```
+uv run pytest
+```
+
+只跑 e2e：
+
+```
+uv run pytest -m e2e
+```
+
+不跑 e2e：
+
+```
+uv run pytest -m "not e2e"
+```

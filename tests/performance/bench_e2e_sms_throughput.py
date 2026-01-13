@@ -4,10 +4,12 @@ import argparse
 import json
 import time
 from typing import Optional, Dict, Any
-
+import pytest
 import requests
 
 from tools.adb.adb_client import AdbClient
+
+pytestmark = (pytest.mark.e2e, pytest.mark.performance)
 
 
 def reset(mock_base: str, timeout: float) -> None:

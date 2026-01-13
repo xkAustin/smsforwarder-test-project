@@ -40,7 +40,8 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install -r requirements-dev.txt
+          pip install uv
+          uv sync --frozen
 
       - name: Resolve env (MOCK_BASE)
         shell: bash
@@ -119,6 +120,9 @@ jobs:
           ADB_SERIAL: ${{ env.ADB_SERIAL }}
           MOCK_BASE: ${{ env.MOCK_BASE }}
           E2E_WAIT: ${{ env.E2E_WAIT }}
+          TRIGGER_MODE: adb
+          TRIGGER_STRICT: "1"
+          ALLOW_DEVICE_SMS: "1"
         run: |
           set -euo pipefail
           mkdir -p reports

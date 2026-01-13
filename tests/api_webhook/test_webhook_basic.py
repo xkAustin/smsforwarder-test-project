@@ -2,33 +2,23 @@ import time
 import requests
 
 
-BASE_URL = "http://127.0.0.1:18080"
-
-
-def reset_events():
-    r = requests.post(f"{BASE_URL}/reset", timeout=3)
-    r.raise_for_status()
-
-
-def get_events(limit=10):
-    r = requests.get(f"{BASE_URL}/events", params={"limit": limit}, timeout=3)
+def get_events(base_url: str, limit=10):
+    r = requests.get(f"{base_url}/events", params={"limit": limit}, timeout=3)
     r.raise_for_status()
     return r.json()
 
 
-def test_webhook_receive_json_body():
+def test_webhook_receive_json_body(mock_base, mock_reset):
     """
     验证：
     - webhook 能收到 POST 请求
     - JSON body 能被正确解析
     """
 
-    reset_events()
-
     # 模拟一次“转发请求”
     payload = {"msg": "pytest", "level": "info"}
     r = requests.post(
-        f"{BASE_URL}/webhook",
+        f"{mock_base}/webhook",
         json=payload,
         timeout=3,
     )
@@ -37,7 +27,7 @@ def test_webhook_receive_json_body():
     # 给 server 一点处理时间（真实场景是异步）
     time.sleep(0.2)
 
-    data = get_events(limit=5)
+    data = get_events(mock_base, limit=5)
 
     assert data["count"] == 1
     event = data["items"][0]
@@ -51,4 +41,3 @@ def test_webhook_receive_json_body():
 
     # Body 断言
     assert event["body_json"] == payload
-

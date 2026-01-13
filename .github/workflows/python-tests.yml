@@ -10,6 +10,7 @@ jobs:
 
     env:
       UV_PYTHON: python
+      TRIGGER_MODE: http
 
     steps:
       - uses: actions/checkout@v4
@@ -29,28 +30,10 @@ jobs:
         run: |
           uv sync --frozen
 
-      - name: Start mock server (background)
-        run: |
-          nohup uv run uvicorn tools.mock_server.app:app --host 127.0.0.1 --port 18080 > mockserver.log 2>&1 &
-          # 简单健康检查（最多等 10 秒）
-          started=false
-          for i in $(seq 1 20); do
-            if curl -s http://127.0.0.1:18080/health; then
-              started=true
-              break
-            fi
-            sleep 0.5
-          done
-
-          if [ "$started" != "true" ]; then
-            echo "mock server failed to start"
-            exit 1
-          fi
-
-      - name: Run tests (exclude e2e & performance)
+      - name: Run tests (full suite)
         run: |
           mkdir -p reports
-          uv run pytest -v -m "not e2e and not performance" \
+          uv run pytest -v \
             --junitxml=reports/junit.xml \
             --html=reports/report.html --self-contained-html
 
@@ -60,4 +43,3 @@ jobs:
           name: test-reports
           path: |
             reports/
-            mockserver.log

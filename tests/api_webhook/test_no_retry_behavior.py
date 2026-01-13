@@ -1,65 +1,72 @@
-import time
 import requests
 import pytest
 
 pytestmark = pytest.mark.manual
 
-BASE_URL = "http://127.0.0.1:18080"
-
-
-def post(path, **kwargs):
-    r = requests.post(f"{BASE_URL}{path}", timeout=3, **kwargs)
+def post(base_url: str, path: str, **kwargs):
+    r = requests.post(f"{base_url}{path}", timeout=3, **kwargs)
     r.raise_for_status()
     return r.json()
 
 
-def get_events(limit=10):
-    r = requests.get(f"{BASE_URL}/events", params={"limit": limit}, timeout=3)
+def get_events(base_url: str, limit=10):
+    r = requests.get(f"{base_url}/events", params={"limit": limit}, timeout=3)
     r.raise_for_status()
     return r.json()
 
 
-def test_no_retry_on_http_500():
+def test_no_retry_on_http_500(mock_base, event_trigger, mock_counter, wait_for_event):
     """
     验证：Webhook 返回 500 时，SmsForwarder 不进行重试
     （预期：仅收到 1 次请求）
     """
 
     # 清空状态
-    post("/reset")
-    post("/fault/reset")
+    post(mock_base, "/reset")
+    post(mock_base, "/fault/reset")
 
     # 设置：第一次 webhook 返回 500
-    post("/fault/config", params={"mode": "fail", "fail_count": 1})
+    post(mock_base, "/fault/config", params={"mode": "fail", "fail_count": 1})
 
-    # ⚠️ 注意：
-    # 这里不再用 requests.post 模拟，
-    # 而是由真实 SmsForwarder 触发
-    # 所以这里只做等待和断言
+    before = mock_counter()
+    marker = "[MANUAL] no-retry-500"
+    result = event_trigger.send_webhook_form(
+        {"from": "10086", "content": f"{marker} hello", "timestamp": "0"},
+        allow_fail=True,
+    )
 
-    time.sleep(5)  # 等待你在手机上触发一次转发
+    ok = wait_for_event(before_count=before, timeout_s=10)
+    assert ok, f"timeout waiting for webhook event (mode={result.mode})"
 
-    events = get_events(limit=10)
+    events = get_events(mock_base, limit=10)
 
     assert events["count"] == 1, (
         "Expected no retry on HTTP 500, " f"but got {events['count']} requests"
     )
 
 
-def test_no_retry_on_timeout():
+def test_no_retry_on_timeout(mock_base, event_trigger, mock_counter, wait_for_event):
     """
     验证：Webhook 请求超时时，SmsForwarder 不进行重试
     """
 
-    post("/reset")
-    post("/fault/reset")
+    post(mock_base, "/reset")
+    post(mock_base, "/fault/reset")
 
     # 设置：强制延迟 10s（超过客户端 timeout）
-    post("/fault/config", params={"mode": "delay", "delay_ms": 10000})
+    post(mock_base, "/fault/config", params={"mode": "delay", "delay_ms": 10000})
 
-    time.sleep(5)  # 等待真实触发
+    before = mock_counter()
+    marker = "[MANUAL] no-retry-timeout"
+    result = event_trigger.send_webhook_form(
+        {"from": "10086", "content": f"{marker} hello", "timestamp": "0"},
+        allow_fail=True,
+    )
 
-    events = get_events(limit=10)
+    ok = wait_for_event(before_count=before, timeout_s=12)
+    assert ok, f"timeout waiting for webhook event (mode={result.mode})"
+
+    events = get_events(mock_base, limit=10)
 
     assert events["count"] == 1, (
         "Expected no retry on timeout, " f"but got {events['count']} requests"

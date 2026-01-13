@@ -4,9 +4,11 @@ import argparse
 import json
 import statistics
 import time
+import pytest
 from typing import List, Dict, Any
-
 import requests
+
+pytestmark = pytest.mark.performance
 
 
 def reset(base: str, timeout: float) -> None:
