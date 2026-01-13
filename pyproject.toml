@@ -1,0 +1,23 @@
+[project]
+name = "smsforwarder-test-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+  "requests",
+  "pytest",
+  "pytest-html",
+  "fastapi",
+  "uvicorn",
+  "pydantic",
+]
+
+[tool.pytest.ini_options]
+markers = [
+  "e2e: end-to-end tests (require emulator and SmsForwarder)",
+  "integration: integration tests (require mock server)",
+  "performance: performance/benchmark tests",
+]
+addopts = "-ra"
+testpaths = ["tests"]

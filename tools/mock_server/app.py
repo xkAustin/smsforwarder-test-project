@@ -5,8 +5,9 @@ import time
 import uuid
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, unquote_plus
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 
@@ -20,11 +21,13 @@ class CapturedEvent:
     headers: Dict[str, str]
     body_raw: str
     body_json: Optional[Any]
+    body_form: Optional[dict]
     response_status: int
 
 
 EVENTS: List[CapturedEvent] = []
 MAX_EVENTS = 5000  # 防止内存无限增长
+
 # ---- Fault Injection (可控故障注入) ----
 FAULT_MODE = "ok"  # ok / fail / delay
 FAIL_COUNT_LEFT = 0  # 还要失败多少次
@@ -39,7 +42,6 @@ def _now_ms() -> int:
 
 
 def _safe_decode(b: bytes) -> str:
-    # 先尽量按 utf-8 解码，失败就用替代字符
     try:
         return b.decode("utf-8")
     except UnicodeDecodeError:
@@ -54,7 +56,6 @@ def _try_parse_json(text: str) -> Optional[Any]:
 
 
 def _normalize_headers(h: Dict[str, str]) -> Dict[str, str]:
-    # FastAPI/Starlette headers 是 case-insensitive，这里统一为小写方便断言
     out: Dict[str, str] = {}
     for k, v in h.items():
         out[k.lower()] = v
@@ -74,7 +75,6 @@ def reset():
 
 @app.get("/events")
 def list_events(limit: int = 50):
-    # 返回最新的 N 条
     limit = max(1, min(limit, 500))
     items = [asdict(e) for e in EVENTS[-limit:]]
     return {"count": len(EVENTS), "items": items}
@@ -128,22 +128,28 @@ async def webhook(request: Request):
     # 尝试按 JSON 解析（如果不是 JSON 就保留 None）
     body_json = _try_parse_json(body_raw)
 
+    # headers 统一小写，方便后续判断 content-type
+    headers_norm = _normalize_headers(dict(request.headers))
+
     # ---- fault behavior ----
     global FAULT_MODE, FAIL_COUNT_LEFT, DELAY_MS
 
     if FAULT_MODE == "delay" and DELAY_MS > 0:
-        # FastAPI async：用 time.sleep 会阻塞；这里简化先用 asyncio.sleep
         import asyncio
 
         await asyncio.sleep(DELAY_MS / 1000.0)
 
+    should_fail = False
     if FAULT_MODE == "fail" and FAIL_COUNT_LEFT > 0:
         FAIL_COUNT_LEFT -= 1
-        # 仍然记录事件（便于你断言“确实请求到了，只是服务端故意失败”）
-        # 这里先不 return，等 event append 后再 return 500
         should_fail = True
-    else:
-        should_fail = False
+
+    # ---- parse x-www-form-urlencoded ----
+    body_form = None
+    ct = headers_norm.get("content-type", "").lower()
+    if "application/x-www-form-urlencoded" in ct:
+        qs = parse_qs(body_raw, keep_blank_values=True)
+        body_form = {k: unquote_plus(v[0]) if v else "" for k, v in qs.items()}
 
     event = CapturedEvent(
         id=str(uuid.uuid4()),
@@ -151,9 +157,10 @@ async def webhook(request: Request):
         method=request.method,
         path=str(request.url.path),
         query=dict(request.query_params),
-        headers=_normalize_headers(dict(request.headers)),
+        headers=headers_norm,
         body_raw=body_raw,
         body_json=body_json,
+        body_form=body_form,
         response_status=200,
     )
 
@@ -161,7 +168,6 @@ async def webhook(request: Request):
     if len(EVENTS) > MAX_EVENTS:
         del EVENTS[0 : len(EVENTS) - MAX_EVENTS]
 
-    # 给 SmsForwarder 一个明确响应，方便判断“转发成功”
     if should_fail:
         event.response_status = 500
         return JSONResponse(

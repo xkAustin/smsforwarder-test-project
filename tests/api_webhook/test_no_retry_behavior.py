@@ -1,5 +1,8 @@
 import time
 import requests
+import pytest
+
+pytestmark = pytest.mark.manual
 
 BASE_URL = "http://127.0.0.1:18080"
 

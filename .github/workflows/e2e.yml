@@ -1,0 +1,138 @@
+name: e2e-tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      adb_serial:
+        description: "ADB device serial (leave empty to auto-pick first available device)"
+        required: false
+        default: ""
+      mock_port:
+        description: "Mock server port"
+        required: false
+        default: "18080"
+      mock_host:
+        description: "Mock server bind host (0.0.0.0 for LAN/VM access, 127.0.0.1 for local)"
+        required: false
+        default: "127.0.0.1"
+      mock_base:
+        description: "Mock base URL used by tests (leave empty to auto build from host:port)"
+        required: false
+        default: ""
+      e2e_wait:
+        description: "Fallback wait seconds (if used)"
+        required: false
+        default: "3"
+
+jobs:
+  e2e:
+    runs-on: self-hosted
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements-dev.txt
+
+      - name: Resolve env (MOCK_BASE)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ADB_SERIAL="${{ inputs.adb_serial }}"
+          MOCK_PORT="${{ inputs.mock_port }}"
+          MOCK_HOST="${{ inputs.mock_host }}"
+          MOCK_BASE_IN="${{ inputs.mock_base }}"
+          E2E_WAIT="${{ inputs.e2e_wait }}"
+
+          if [ -z "${MOCK_BASE_IN}" ]; then
+            MOCK_BASE="http://127.0.0.1:${MOCK_PORT}"
+          else
+            MOCK_BASE="${MOCK_BASE_IN}"
+          fi
+
+          echo "ADB_SERIAL=${ADB_SERIAL}" >> "$GITHUB_ENV"
+          echo "MOCK_PORT=${MOCK_PORT}" >> "$GITHUB_ENV"
+          echo "MOCK_HOST=${MOCK_HOST}" >> "$GITHUB_ENV"
+          echo "MOCK_BASE=${MOCK_BASE}" >> "$GITHUB_ENV"
+          echo "E2E_WAIT=${E2E_WAIT}" >> "$GITHUB_ENV"
+
+          echo "Resolved:"
+          echo "  ADB_SERIAL=${ADB_SERIAL:-<auto-pick>}"
+          echo "  MOCK_HOST=${MOCK_HOST}"
+          echo "  MOCK_PORT=${MOCK_PORT}"
+          echo "  MOCK_BASE=${MOCK_BASE}"
+          echo "  E2E_WAIT=${E2E_WAIT}"
+
+      - name: Start mock server (background) + healthcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # 后台启动 mock server
+          nohup python -m uvicorn tools.mock_server.app:app \
+            --host "${MOCK_HOST}" --port "${MOCK_PORT}" \
+            > mock_server.log 2>&1 &
+
+          # 健康检查：注意 tests 默认访问 MOCK_BASE（通常是 127.0.0.1）
+          python - << 'PY'
+          import os, time, requests, sys
+          base = os.environ["MOCK_BASE"]
+          url = base + "/health"
+          for i in range(60):
+            try:
+              r = requests.get(url, timeout=1)
+              if r.status_code == 200:
+                print("mock server ok:", url)
+                sys.exit(0)
+            except Exception:
+              pass
+            time.sleep(0.25)
+          raise SystemExit(f"mock server not ready: {url}")
+          PY
+
+      - name: ADB precheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v adb
+          adb version
+          adb devices
+
+          # 如果提供了 ADB_SERIAL，就验证它存在；否则交给 pytest 自动 pick
+          if [ -n "${ADB_SERIAL}" ]; then
+            adb -s "${ADB_SERIAL}" get-state
+          fi
+
+      - name: Run e2e
+        shell: bash
+        env:
+          # 这些环境变量会被 conftest.py 读取
+          ADB_SERIAL: ${{ env.ADB_SERIAL }}
+          MOCK_BASE: ${{ env.MOCK_BASE }}
+          E2E_WAIT: ${{ env.E2E_WAIT }}
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+
+          # 只跑 e2e marker
+          pytest -v -m e2e \
+            --junitxml=reports/junit.xml \
+            --html=reports/report.html --self-contained-html
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-artifacts
+          path: |
+            reports/
+            mock_server.log
