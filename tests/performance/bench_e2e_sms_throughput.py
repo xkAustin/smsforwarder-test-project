@@ -9,7 +9,7 @@ import requests
 
 from tools.adb.adb_client import AdbClient
 
-pytestmark = (pytest.mark.e2e, pytest.mark.performance)
+pytestmark = [pytest.mark.e2e, pytest.mark.performance]
 
 
 def reset(mock_base: str, timeout: float) -> None:

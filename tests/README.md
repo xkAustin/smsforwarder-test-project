@@ -11,7 +11,7 @@
 - e2e_blackbox/
   - 黑盒端到端测试
 - rules/
-  - 规则匹配相关测试（后续）
+  - 规则匹配相关测试
 
 ## 运行方式
 
@@ -25,9 +25,9 @@ uv run pytest
 
 ```
 uv run pytest -m e2e
-uv run pytest -m "not e2e"
 uv run pytest -m manual
 uv run pytest -m performance
+uv run pytest -m "not e2e and not performance and not manual"
 ```
 
 ## 触发方式（自动/设备/HTTP）
