@@ -19,17 +19,6 @@
 - 自定义 mock Webhook Server
 - GitHub Actions
 
-## 项目结构
-
-── TEST_STRATEGY.md
-├── README.md
-├── tests/
-│ ├── api_webhook/
-│ ├── performance/
-│ ├── e2e_blackbox/
-│ └── README.md
-└── tools/
-└── mock_server/
 
 ## 使用说明
 
@@ -49,7 +38,7 @@ uv run pytest
 uv run pytest -m e2e
 ```
 
-不跑 e2e：
+不跑 e2e/performance/manual：
 
 ```
 uv run pytest -m "not e2e"
