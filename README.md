@@ -19,18 +19,6 @@
 - 自定义 mock Webhook Server
 - GitHub Actions
 
-## 项目结构
-
-── TEST_STRATEGY.md
-├── README.md
-├── tests/
-│ ├── api_webhook/
-│ ├── performance/
-│ ├── e2e_blackbox/
-│ └── README.md
-└── tools/
-└── mock_server/
-
 ## 使用说明
 
 详细的测试说明与目录解释请查看 `tests/README.md`

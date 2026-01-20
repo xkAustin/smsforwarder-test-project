@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# 虚拟环境
+.venv/
+venv/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Test / build artifacts
+dist/
+build/
+reports/
+coverage.xml
+htmlcov/
+
+# Logs
+*.log
+
+# Docker 本身
+Dockerfile
+.dockerignore
+Dockerfile.*
+docker-compose.yml
+docker-compose.*.yml
