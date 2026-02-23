@@ -43,3 +43,33 @@ uv run pytest -m e2e
 ```
 uv run pytest -m "not e2e"
 ```
+
+## Docker 环境运行
+
+本项目支持使用 Docker Compose 构建隔离的测试环境。
+
+### 构建环境
+
+```bash
+docker compose build
+# 或者使用 Makefile
+make build
+```
+
+### 运行测试
+
+运行非 E2E 测试（不需要设备）：
+
+```bash
+docker compose up --exit-code-from tests
+# 或者
+make test
+```
+
+### 清理环境
+
+```bash
+docker compose down -v
+# 或者
+make clean
+```
