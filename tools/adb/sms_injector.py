@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import shlex
 import subprocess
 from dataclasses import dataclass
 from typing import Optional
@@ -46,7 +46,7 @@ def inject_sms(
     if mode == "ssh":
         if not ssh_host:
             raise ValueError("ssh_host is required when mode=ssh")
-        remote = " ".join(adb_cmd)
+        remote = shlex.join(adb_cmd)
         return _run(["ssh", ssh_host, remote])
 
     raise ValueError(f"unknown mode: {mode}")
