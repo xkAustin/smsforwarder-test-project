@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, unquote_plus
@@ -25,8 +26,8 @@ class CapturedEvent:
     response_status: int
 
 
-EVENTS: List[CapturedEvent] = []
 MAX_EVENTS = 5000  # 防止内存无限增长
+EVENTS: deque[CapturedEvent] = deque(maxlen=MAX_EVENTS)
 
 # ---- Fault Injection (可控故障注入) ----
 FAULT_MODE = "ok"  # ok / fail / delay
@@ -76,7 +77,7 @@ def reset():
 @app.get("/events")
 def list_events(limit: int = 50):
     limit = max(1, min(limit, 500))
-    items = [asdict(e) for e in EVENTS[-limit:]]
+    items = [asdict(e) for e in list(EVENTS)[-limit:]]
     return {"count": len(EVENTS), "items": items}
 
 
@@ -165,8 +166,6 @@ async def webhook(request: Request):
     )
 
     EVENTS.append(event)
-    if len(EVENTS) > MAX_EVENTS:
-        del EVENTS[0 : len(EVENTS) - MAX_EVENTS]
 
     if should_fail:
         event.response_status = 500
