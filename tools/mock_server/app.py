@@ -34,6 +34,9 @@ FAULT_MODE = "ok"  # ok / fail / delay
 FAIL_COUNT_LEFT = 0  # 还要失败多少次
 DELAY_MS = 0  # 每次延迟多少毫秒
 
+MAX_DELAY_MS = 60000  # 最大延迟 60 秒，防止 DoS
+MAX_FAIL_COUNT = 10000  # 最大失败次数
+
 
 app = FastAPI(title="SmsForwarder Mock Webhook Server", version="0.1.0")
 
@@ -111,8 +114,8 @@ def fault_config(mode: str = "ok", fail_count: int = 0, delay_ms: int = 0):
         return JSONResponse({"error": "bad_mode"}, status_code=400)
 
     FAULT_MODE = mode
-    FAIL_COUNT_LEFT = max(0, int(fail_count))
-    DELAY_MS = max(0, int(delay_ms))
+    FAIL_COUNT_LEFT = max(0, min(int(fail_count), MAX_FAIL_COUNT))
+    DELAY_MS = max(0, min(int(delay_ms), MAX_DELAY_MS))
     return {
         "ok": True,
         "mode": FAULT_MODE,
