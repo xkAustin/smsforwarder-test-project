@@ -45,5 +45,15 @@ class TestSMSInjectorSecurity(unittest.TestCase):
         parts = shlex.split(remote_cmd)
         self.assertEqual(parts[-1], text)
 
+    def test_ssh_mode_missing_host(self):
+        with self.assertRaises(ValueError) as cm:
+            inject_sms("serial", "123456", "text", mode="ssh", ssh_host=None)
+        self.assertEqual(str(cm.exception), "ssh_host is required when mode=ssh")
+
+    def test_unknown_mode(self):
+        with self.assertRaises(ValueError) as cm:
+            inject_sms("serial", "123456", "text", mode="invalid")
+        self.assertIn("unknown mode: invalid", str(cm.exception))
+
 if __name__ == "__main__":
     unittest.main()
