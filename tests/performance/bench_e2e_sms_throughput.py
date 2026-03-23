@@ -16,8 +16,12 @@ def reset(mock_base: str, timeout: float) -> None:
     requests.post(f"{mock_base}/reset", timeout=timeout).raise_for_status()
     try:
         requests.post(f"{mock_base}/fault/reset", timeout=timeout).raise_for_status()
-    except Exception:
-        pass
+    except requests.HTTPError as e:
+        # fault/reset might not exist in some versions of mock server; ignore 404/405
+        if e.response is not None and e.response.status_code in (404, 405):
+            pass
+        else:
+            raise
 
 
 def get_count(mock_base: str, timeout: float) -> int:
