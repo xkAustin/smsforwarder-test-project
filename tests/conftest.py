@@ -336,7 +336,8 @@ def wait_for_event(mock_base):
 def get_new_events(mock_base):
     """
     给定 before_count，返回一个函数：拉取新增事件列表（从旧 count 之后的新增部分）
-    注意：/events?limit=xxx 只返回最近 limit 条，因此 limit 必须 >= 新增数量，否则会截断。
+    注意：/events?limit=N 只返回最近 N 条（Mock Server 默认为 50，最大 500），
+    因此 limit 必须 >= 新增数量，否则会截断。
     """
 
     def _factory(before_count: int):
