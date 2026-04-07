@@ -76,5 +76,15 @@ class TestAdbClient(unittest.TestCase):
 
         self.assertIn("No adb device in 'device' state", str(cm.exception))
 
+    def test_is_emulator_serial(self):
+        self.assertTrue(AdbClient.is_emulator_serial("emulator-5554"))
+        self.assertTrue(AdbClient.is_emulator_serial("emulator-5556"))
+        self.assertTrue(AdbClient.is_emulator_serial("emulator-12345"))
+        self.assertFalse(AdbClient.is_emulator_serial("emulator-"))
+        self.assertFalse(AdbClient.is_emulator_serial("emulator-abc"))
+        self.assertFalse(AdbClient.is_emulator_serial("device-5554"))
+        self.assertFalse(AdbClient.is_emulator_serial("127.0.0.1:5555"))
+        self.assertFalse(AdbClient.is_emulator_serial(""))
+
 if __name__ == "__main__":
     unittest.main()

@@ -88,7 +88,7 @@ def main():
     ap.add_argument(
         "--adb-serial",
         default="",
-        help="adb device serial; if empty, auto-select (prefer emulator-xxxx). Env ADB_SERIAL also works.",
+        help="adb device serial; if empty, auto-select (prefer emulator-<port>). Env ADB_SERIAL also works.",
     )
     ap.add_argument("--no-reset", action="store_true", help="do not reset server state")
     args = ap.parse_args()

@@ -32,7 +32,7 @@ class TriggerResult:
 
 
 def _emulator_port(serial: str) -> Optional[int]:
-    if not serial.startswith("emulator-"):
+    if not AdbClient.is_emulator_serial(serial):
         return None
     try:
         return int(serial.split("-", 1)[1])
@@ -188,7 +188,7 @@ class EventTrigger:
                     raise RuntimeError(f"adb unavailable: {exc}") from exc
                 return self._fallback_http(phone, text, "no adb device", allow_fail)
 
-        if serial.startswith("emulator-"):
+        if AdbClient.is_emulator_serial(serial):
             if not _emulator_console_reachable(serial):
                 if self.config.mode == "adb" or self.config.strict:
                     raise RuntimeError(

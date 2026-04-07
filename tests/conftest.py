@@ -136,7 +136,7 @@ def pick_adb_serial(prefer_emulator: bool = True) -> str:
 
     if prefer_emulator:
         for d in devs:
-            if d.startswith("emulator-"):
+            if AdbClient.is_emulator_serial(d):
                 return d
 
     return devs[0]
