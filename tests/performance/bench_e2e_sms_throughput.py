@@ -119,7 +119,7 @@ def main():
                             "skipped": True,
                             "reason": "no adb device found in 'device' state",
                             "hint": "start an emulator or use --trigger http_only",
-                            "adb_devices_raw": adb.list_devices_raw().stdout,
+                            "adb_devices_raw": adb.list_devices().stdout,
                         },
                         indent=2,
                     )

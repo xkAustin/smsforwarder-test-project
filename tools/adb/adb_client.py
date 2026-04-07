@@ -25,7 +25,7 @@ class AdbClient:
     ADB 客户端封装（面向测试工程）：
     - 支持解析设备列表
     - 自动选择 serial（优先 emulator-xxxx）
-    - 兼容接口：list_devices() / send_sms()
+    - 接口：list_devices() / send_sms()
     """
 
     def __init__(self, serial: Optional[str] = None):
@@ -49,17 +49,14 @@ class AdbClient:
 
     # ---- device listing / parsing ----
 
-    def list_devices_raw(self) -> AdbResult:
-        return self.run("devices", "-l", timeout=10)
-
     def list_devices(self) -> AdbResult:
         """
-        兼容旧接口：返回 adb devices -l 的原始结果（AdbResult）
+        返回 adb devices -l 的原始结果（AdbResult）
         """
-        return self.list_devices_raw()
+        return self.run("devices", "-l", timeout=10)
 
     def get_devices(self) -> List[AdbDevice]:
-        r = self.list_devices_raw()
+        r = self.list_devices()
         if r.returncode != 0:
             raise RuntimeError(f"adb devices failed: {r.stderr}")
 
@@ -90,7 +87,7 @@ class AdbClient:
         if not devices:
             raise RuntimeError(
                 "No adb device in 'device' state.\n"
-                f"adb output:\n{self.list_devices_raw().stdout}\n"
+                f"adb output:\n{self.list_devices().stdout}\n"
                 f"parsed={all_devs}"
             )
 
@@ -103,16 +100,10 @@ class AdbClient:
 
     # ---- actions ----
 
-    def send_sms_emulator(self, phone: str, text: str) -> AdbResult:
-        """
-        emulator 专用：模拟收到短信
-        """
-        return self.run("emu", "sms", "send", phone, text, timeout=10)
-
     def send_sms(self, phone: str, text: str) -> AdbResult:
         """
-        兼容旧接口：
-        目前等同 send_sms_emulator（仅对 emulator 生效）。
+        发送短信。
+        目前仅支持 emulator（通过 emu sms send 模拟收到短信）。
         后续如需支持真机，可在这里扩展策略。
         """
-        return self.send_sms_emulator(phone, text)
+        return self.run("emu", "sms", "send", phone, text, timeout=10)
