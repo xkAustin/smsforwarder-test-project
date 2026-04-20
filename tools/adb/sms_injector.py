@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import shlex
 import subprocess
 from dataclasses import dataclass
 from typing import Optional
@@ -14,15 +14,20 @@ class CmdResult:
 
 
 def _run(cmd: list[str], timeout: int = 20) -> CmdResult:
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    return CmdResult(p.returncode, p.stdout.strip(), p.stderr.strip())
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return CmdResult(p.returncode, p.stdout.strip(), p.stderr.strip())
+    except FileNotFoundError:
+        return CmdResult(-1, "", f"Command not found: {cmd[0]}")
+    except subprocess.TimeoutExpired:
+        return CmdResult(-1, "", f"Command timed out: {cmd}")
 
 
 def inject_sms(
     serial: str,
     phone: str,
     text: str,
-    mode: str = "mac_cmd",
+    mode: str = "local",
     mac_cmd: str = "mac",
     ssh_host: Optional[str] = None,
 ) -> CmdResult:
@@ -46,7 +51,7 @@ def inject_sms(
     if mode == "ssh":
         if not ssh_host:
             raise ValueError("ssh_host is required when mode=ssh")
-        remote = " ".join(adb_cmd)
+        remote = shlex.join(adb_cmd)
         return _run(["ssh", ssh_host, remote])
 
     raise ValueError(f"unknown mode: {mode}")

@@ -14,10 +14,12 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
+pythonpath = "."
+testpaths = ["tests"]
+addopts = "-ra"
 markers = [
   "e2e: end-to-end tests (require emulator and SmsForwarder)",
   "integration: integration tests (require mock server)",
   "performance: performance/benchmark tests",
+  "manual: requires manual trigger (run with -m manual)",
 ]
-addopts = "-ra"
-testpaths = ["tests"]

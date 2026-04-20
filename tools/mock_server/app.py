@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, unquote_plus
@@ -25,13 +26,16 @@ class CapturedEvent:
     response_status: int
 
 
-EVENTS: List[CapturedEvent] = []
 MAX_EVENTS = 5000  # 防止内存无限增长
+EVENTS: deque[CapturedEvent] = deque(maxlen=MAX_EVENTS)
 
 # ---- Fault Injection (可控故障注入) ----
 FAULT_MODE = "ok"  # ok / fail / delay
 FAIL_COUNT_LEFT = 0  # 还要失败多少次
 DELAY_MS = 0  # 每次延迟多少毫秒
+
+MAX_DELAY_MS = 60000  # 最大延迟 60 秒，防止 DoS
+MAX_FAIL_COUNT = 10000  # 最大失败次数
 
 
 app = FastAPI(title="SmsForwarder Mock Webhook Server", version="0.1.0")
@@ -76,7 +80,7 @@ def reset():
 @app.get("/events")
 def list_events(limit: int = 50):
     limit = max(1, min(limit, 500))
-    items = [asdict(e) for e in EVENTS[-limit:]]
+    items = [asdict(e) for e in list(EVENTS)[-limit:]]
     return {"count": len(EVENTS), "items": items}
 
 
@@ -110,8 +114,8 @@ def fault_config(mode: str = "ok", fail_count: int = 0, delay_ms: int = 0):
         return JSONResponse({"error": "bad_mode"}, status_code=400)
 
     FAULT_MODE = mode
-    FAIL_COUNT_LEFT = max(0, int(fail_count))
-    DELAY_MS = max(0, int(delay_ms))
+    FAIL_COUNT_LEFT = max(0, min(int(fail_count), MAX_FAIL_COUNT))
+    DELAY_MS = max(0, min(int(delay_ms), MAX_DELAY_MS))
     return {
         "ok": True,
         "mode": FAULT_MODE,
@@ -165,8 +169,6 @@ async def webhook(request: Request):
     )
 
     EVENTS.append(event)
-    if len(EVENTS) > MAX_EVENTS:
-        del EVENTS[0 : len(EVENTS) - MAX_EVENTS]
 
     if should_fail:
         event.response_status = 500

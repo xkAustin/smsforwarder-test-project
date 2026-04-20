@@ -16,8 +16,11 @@ def reset(base: str, timeout: float) -> None:
     # fault/reset 不一定存在：不存在就忽略
     try:
         requests.post(f"{base}/fault/reset", timeout=timeout).raise_for_status()
-    except Exception:
-        pass
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code in (404, 405):
+            pass
+        else:
+            raise
 
 
 def percentile(values: List[float], p: float) -> float:

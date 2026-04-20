@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import List, Optional
@@ -24,7 +25,7 @@ class AdbClient:
     """
     ADB 客户端封装（面向测试工程）：
     - 支持解析设备列表
-    - 自动选择 serial（优先 emulator-xxxx）
+    - 自动选择 serial（优先 emulator-<port> 格式的模拟器）
     - 兼容接口：list_devices() / send_sms()
     """
 
@@ -74,12 +75,19 @@ class AdbClient:
             out.append(AdbDevice(serial=serial, state=state, desc=desc))
         return out
 
+    @staticmethod
+    def is_emulator_serial(serial: str) -> bool:
+        """
+        判断 serial 是否符合标准的模拟器命名逻辑 (emulator-<port>)。
+        """
+        return bool(re.fullmatch(r"emulator-\d+", serial))
+
     def choose_serial(self, prefer_emulator: bool = True) -> str:
         """
         自动选择一个可用设备：
         - 环境变量 ADB_SERIAL 优先（如果设置了）
-        - 默认优先 emulator-xxxx
-        - 否则选择第一个 state=device 的设备
+        - 如果 prefer_emulator=True，优先选择符合 emulator-<port> 格式的设备
+        - 否则选择第一个 state='device' 的设备
         """
         env_serial = os.getenv("ADB_SERIAL", "").strip()
         if env_serial:
@@ -95,7 +103,7 @@ class AdbClient:
             )
 
         if prefer_emulator:
-            emus = [d for d in devices if d.serial.startswith("emulator-")]
+            emus = [d for d in devices if self.is_emulator_serial(d.serial)]
             if emus:
                 return emus[0].serial
 

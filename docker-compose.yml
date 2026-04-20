@@ -1,0 +1,26 @@
+services:
+  tests:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - MOCK_BASE=http://mock_server:18080
+      - NO_AUTO_MOCK_SERVER=1
+      - TRIGGER_MODE=http
+    command: uv run pytest -m "not e2e"
+    depends_on:
+      mock_server:
+        condition: service_healthy
+
+  mock_server:
+    build: .
+    command: uv run python -m uvicorn tools.mock_server.app:app --host 0.0.0.0 --port 18080
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "18080:18080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
