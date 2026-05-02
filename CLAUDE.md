@@ -37,11 +37,13 @@ docker compose up --exit-code-from tests
 ## Architecture
 
 ### Mock Webhook Server (`tools/mock_server/app.py`)
-FastAPI app that captures webhook events into an in-memory deque. Key endpoints:
-- `POST /webhook` — capture incoming webhook requests
-- `GET /events` — list captured events
+FastAPI app that captures webhook events into an in-memory deque (max 5000). Key endpoints:
+- `* /webhook` — capture incoming webhook requests (all HTTP methods)
+- `GET /events` — list captured events (`?limit=N`, clamped to 1–500)
+- `GET /events/{event_id}` — fetch single event by UUID
 - `POST /reset` — clear all events
-- `POST /fault/config` — configure fault injection (ok/fail/delay modes)
+- `POST /fault/reset` — reset fault injection state
+- `POST /fault/config` — configure fault injection (mode=ok|fail|delay, fail_count, delay_ms)
 - `GET /health` — health check
 
 ### Test Trigger System (`tests/utils/trigger.py`)
@@ -57,10 +59,10 @@ Trigger mode is set via `TRIGGER_MODE` env var or `--trigger-mode` CLI flag.
 `adb_client.py` wraps ADB device management; `sms_injector.py` handles SMS injection into emulators.
 
 ### Test Categories
-- `tests/api_webhook/` — Webhook API contract tests: basic JSON/form reception, edge cases (malformed JSON, large payloads, missing content-type), fault injection (server errors, delays), security bounds, retry behavior
-- `tests/e2e_blackbox/` — End-to-end tests requiring a running Android device/emulator
-- `tests/performance/` — Throughput and latency benchmarks for webhook receiver and e2e SMS flow
-- `tests/unit/` — Unit tests for mock server utilities, ADB client, SMS injector
+- `tests/api_webhook/` — Webhook API contract tests (8 files, 43 tests): HTTP methods (GET/POST/PUT/PATCH/DELETE), JSON/form/empty body, custom headers, HMAC-SHA256 signing, Basic Auth, Unicode, fault injection, security bounds, concurrency (50 threads), event ordering, retry behavior, mock server regression (schema, /events/{id}, deque bounds, idempotency)
+- `tests/e2e_blackbox/` — End-to-end tests (2 files, 3 tests): ADB injection → SmsForwarder → webhook verification
+- `tests/performance/` — Throughput and latency benchmarks (2 CLI tools + 2 smoke tests) for webhook receiver and e2e SMS flow
+- `tests/unit/` — Unit tests (4 files, 15 tests): ADB device selection, SMS injector security, mac_cmd mode, mock server _safe_decode
 
 ### Test Infrastructure (`tests/conftest.py`)
 Session-scoped fixture auto-starts the mock server (uvicorn) unless `NO_AUTO_MOCK_SERVER=1`. Key fixtures: `mock_base`, `mock_reset`, `mock_counter`, `wait_for_event`, `get_new_events`, `event_trigger`, `trigger_config`.
@@ -70,10 +72,22 @@ Session-scoped fixture auto-starts the mock server (uvicorn) unless `NO_AUTO_MOC
 - `.github/workflows/e2e.yml` — manual-dispatch workflow for self-hosted runners with ADB access
 
 ### Environment Variables / CLI Flags
-- `MOCK_BASE` — mock server URL (default: `http://127.0.0.1:18080`)
+- `MOCK_BASE` / `--mock-base` — mock server URL (default: `http://127.0.0.1:18080`)
+- `MOCK_HOST` / `MOCK_PORT` — server bind host/port
 - `NO_AUTO_MOCK_SERVER=1` — skip auto-starting mock server
-- `TRIGGER_MODE` — `auto|adb|http|manual`
-- `TRIGGER_STRICT=1` — fail if ADB trigger unavailable
-- `TRIGGER_PREFER_ADB=1` — prefer ADB in auto mode
-- `ADB_SERIAL` — specific ADB device serial
-- `SMS_INJECT_MODE` — `local|mac_cmd|ssh`
+- `TRIGGER_MODE` / `--trigger-mode` — `auto|adb|http|manual`
+- `TRIGGER_STRICT=1` / `--trigger-strict` — fail if ADB trigger unavailable
+- `TRIGGER_PREFER_ADB=1` / `--trigger-prefer-adb` — prefer ADB in auto mode
+- `ADB_SERIAL` / `--adb-serial` — specific ADB device serial
+- `SMS_INJECT_MODE` / `--sms-inject-mode` — `local|mac_cmd|ssh`
+- `SMS_INJECT_MAC_CMD` / `--sms-inject-mac-cmd` — custom mac command name
+- `SMS_INJECT_SSH_HOST` / `--sms-inject-ssh-host` — SSH remote host
+- `ALLOW_DEVICE_SMS` / `--allow-device-sms` — enable best-effort device SMS injection
+
+### Documentation
+- `README.md` — project overview, architecture diagram, quick start, full config reference, mock server API
+- `CONTRIBUTING.md` — development setup, code style, test naming conventions, commit/PR guidelines
+- `SECURITY.md` — security boundaries, SSH injection safety, CI security, checklist for changes
+- `docs/ARCHITECTURE.md` — detailed system design, data flow, key file walkthrough, extension points
+- `TEST_STRATEGY.md` — test objectives, coverage matrix, environment compatibility, regression strategy
+- `tests/README.md` — directory structure, fixture reference, trigger mode guide, E2E prerequisites

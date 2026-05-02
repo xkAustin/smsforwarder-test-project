@@ -1,7 +1,7 @@
 [project]
 name = "smsforwarder-test-project"
 version = "0.1.0"
-description = "Add your description here"
+description = "Testing infrastructure for SmsForwarder — API contract, E2E black-box, performance benchmarks, and unit tests"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
