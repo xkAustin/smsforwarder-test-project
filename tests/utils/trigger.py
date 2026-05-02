@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import socket
 import time
-from typing import Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import requests
 
 from tools.adb.adb_client import AdbClient, AdbResult
 from tools.adb.sms_injector import CmdResult, inject_sms
+
+if TYPE_CHECKING:
+    from tests.utils.api_client import MockApiClient
 
 
 @dataclass(frozen=True)
@@ -26,12 +29,12 @@ class TriggerConfig:
 @dataclass(frozen=True)
 class TriggerResult:
     mode: str
-    serial: Optional[str]
+    serial: str | None
     used_fallback: bool
     detail: str
 
 
-def _emulator_port(serial: str) -> Optional[int]:
+def _emulator_port(serial: str) -> int | None:
     if not AdbClient.is_emulator_serial(serial):
         return None
     try:
@@ -101,26 +104,39 @@ def _send_sms_device_best_effort(serial: str, phone: str, text: str) -> AdbResul
 
 
 class EventTrigger:
-    def __init__(self, mock_base: str, config: TriggerConfig):
+    def __init__(
+        self,
+        mock_base: str,
+        config: TriggerConfig,
+        api_client: MockApiClient | None = None,
+    ):
         self.mock_base = mock_base.rstrip("/")
         self.config = config
+        self._api_client = api_client
 
     def send_webhook_json(
         self, payload: dict, timeout: float = 3.0, allow_fail: bool = False
     ) -> TriggerResult:
+        if self._api_client is not None:
+            try:
+                self._api_client.post_webhook(json=payload, allow_fail=allow_fail, timeout=timeout)
+            except requests.RequestException as exc:
+                if not allow_fail:
+                    raise
+                return TriggerResult(
+                    mode="http", serial=None, used_fallback=False,
+                    detail=f"json request failed: {exc}",
+                )
+            return TriggerResult(mode="http", serial=None, used_fallback=False, detail="json")
         try:
-            r = requests.post(
-                f"{self.mock_base}/webhook", json=payload, timeout=timeout
-            )
+            r = requests.post(f"{self.mock_base}/webhook", json=payload, timeout=timeout)
             if not allow_fail:
                 r.raise_for_status()
         except requests.RequestException as exc:
             if not allow_fail:
                 raise
             return TriggerResult(
-                mode="http",
-                serial=None,
-                used_fallback=False,
+                mode="http", serial=None, used_fallback=False,
                 detail=f"json request failed: {exc}",
             )
         return TriggerResult(mode="http", serial=None, used_fallback=False, detail="json")
@@ -128,6 +144,17 @@ class EventTrigger:
     def send_webhook_form(
         self, form: dict, timeout: float = 3.0, allow_fail: bool = False
     ) -> TriggerResult:
+        if self._api_client is not None:
+            try:
+                self._api_client.post_webhook(data=form, allow_fail=allow_fail, timeout=timeout)
+            except requests.RequestException as exc:
+                if not allow_fail:
+                    raise
+                return TriggerResult(
+                    mode="http", serial=None, used_fallback=False,
+                    detail=f"form request failed: {exc}",
+                )
+            return TriggerResult(mode="http", serial=None, used_fallback=False, detail="form")
         try:
             r = requests.post(f"{self.mock_base}/webhook", data=form, timeout=timeout)
             if not allow_fail:
@@ -136,9 +163,7 @@ class EventTrigger:
             if not allow_fail:
                 raise
             return TriggerResult(
-                mode="http",
-                serial=None,
-                used_fallback=False,
+                mode="http", serial=None, used_fallback=False,
                 detail=f"form request failed: {exc}",
             )
         return TriggerResult(mode="http", serial=None, used_fallback=False, detail="form")
@@ -156,9 +181,7 @@ class EventTrigger:
             )
         if mode == "auto" and not self.config.prefer_adb:
             return self._send_http_sms(phone, text, allow_fail=allow_fail)
-        return self._send_adb_or_fallback(
-            phone, text, prefer_emulator=True, allow_fail=allow_fail
-        )
+        return self._send_adb_or_fallback(phone, text, prefer_emulator=True, allow_fail=allow_fail)
 
     def send_sms_batch(
         self, phone: str, texts: list[str], allow_fail: bool = False
@@ -170,9 +193,7 @@ class EventTrigger:
             mode=self.config.mode, serial=None, used_fallback=False, detail="no-op"
         )
 
-    def _send_http_sms(
-        self, phone: str, text: str, allow_fail: bool = False
-    ) -> TriggerResult:
+    def _send_http_sms(self, phone: str, text: str, allow_fail: bool = False) -> TriggerResult:
         form = {"from": phone, "content": text, "timestamp": str(int(time.time()))}
         return self.send_webhook_form(form, allow_fail=allow_fail)
 
@@ -191,12 +212,8 @@ class EventTrigger:
         if AdbClient.is_emulator_serial(serial):
             if not _emulator_console_reachable(serial):
                 if self.config.mode == "adb" or self.config.strict:
-                    raise RuntimeError(
-                        f"emulator console not reachable on serial {serial}"
-                    )
-                return self._fallback_http(
-                    phone, text, "emulator console unreachable", allow_fail
-                )
+                    raise RuntimeError(f"emulator console not reachable on serial {serial}")
+                return self._fallback_http(phone, text, "emulator console unreachable", allow_fail)
             result = _send_sms_emulator(serial, phone, text, self.config)
             if result.returncode == 0:
                 return TriggerResult(
@@ -227,14 +244,10 @@ class EventTrigger:
             )
 
         if self.config.mode == "adb" or self.config.strict:
-            raise RuntimeError(
-                f"serial {serial} is not emulator and device sms is disabled"
-            )
+            raise RuntimeError(f"serial {serial} is not emulator and device sms is disabled")
         return self._fallback_http(phone, text, "device sms disabled", allow_fail)
 
-    def _fallback_http(
-        self, phone: str, text: str, reason: str, allow_fail: bool
-    ) -> TriggerResult:
+    def _fallback_http(self, phone: str, text: str, reason: str, allow_fail: bool) -> TriggerResult:
         self._send_http_sms(phone, text, allow_fail=allow_fail)
         return TriggerResult(
             mode="http",

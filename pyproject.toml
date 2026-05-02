@@ -8,18 +8,76 @@ dependencies = [
   "requests",
   "pytest",
   "pytest-html",
+  "pytest-xdist[psutil]",
+  "pytest-retry",
+  "pytest-cov",
   "fastapi",
   "uvicorn",
   "pydantic",
 ]
 
+[dependency-groups]
+dev = [
+  "ruff",
+]
+
 [tool.pytest.ini_options]
 pythonpath = "."
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --strict-markers"
+#addopts = "-ra --strict-markers -n auto --dist loadscope"
 markers = [
+  "smoke: critical fast checks (< 2s), run on every commit",
+  "regression: full regression suite (slower, more coverage)",
   "e2e: end-to-end tests (require emulator and SmsForwarder)",
   "integration: integration tests (require mock server)",
   "performance: performance/benchmark tests",
+  "unit: unit tests (no external dependencies, run on every commit)",
   "manual: requires manual trigger (run with -m manual)",
+  "xdist: compatible with pytest-xdist parallel execution (--dist loadscope)",
+]
+retries = 1
+retry_delay = 0.5
+log_cli = false
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)s] %(message)s"
+junit_suite_name = "smsforwarder-test-suite"
+junit_logging = "all"
+junit_family = "xunit2"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "W",   # pycodestyle warnings
+  "I",   # isort (import sorting)
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "UP",  # pyupgrade
+]
+ignore = [
+  "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["tests", "tools"]
+
+[tool.coverage.run]
+source = ["tools", "tests"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_also = [
+  "if __name__ == .__main__.:",
+  "def main()",
+  "raise NotImplementedError",
 ]

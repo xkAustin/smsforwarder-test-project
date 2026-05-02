@@ -4,26 +4,17 @@ import argparse
 import json
 import statistics
 import time
+from typing import Any
+
 import pytest
-from typing import List, Dict, Any
 import requests
+
+from tests.utils.api_client import full_reset as reset
 
 pytestmark = pytest.mark.performance
 
 
-def reset(base: str, timeout: float) -> None:
-    requests.post(f"{base}/reset", timeout=timeout).raise_for_status()
-    # fault/reset 不一定存在：不存在就忽略
-    try:
-        requests.post(f"{base}/fault/reset", timeout=timeout).raise_for_status()
-    except requests.HTTPError as e:
-        if e.response is not None and e.response.status_code in (404, 405):
-            pass
-        else:
-            raise
-
-
-def percentile(values: List[float], p: float) -> float:
+def percentile(values: list[float], p: float) -> float:
     """p in [0,100]"""
     if not values:
         return 0.0
@@ -38,8 +29,8 @@ def percentile(values: List[float], p: float) -> float:
     return d0 + d1
 
 
-def run(base: str, n: int, timeout: float, warmup: int) -> Dict[str, Any]:
-    lat_ms: List[float] = []
+def run(base: str, n: int, timeout: float, warmup: int) -> dict[str, Any]:
+    lat_ms: list[float] = []
     ok = 0
 
     # warmup
@@ -85,16 +76,10 @@ def run(base: str, n: int, timeout: float, warmup: int) -> Dict[str, Any]:
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Benchmark mock webhook receiver (no device required)"
-    )
-    ap.add_argument(
-        "--base", default="http://127.0.0.1:18080", help="mock server base url"
-    )
+    ap = argparse.ArgumentParser(description="Benchmark mock webhook receiver (no device required)")
+    ap.add_argument("--base", default="http://127.0.0.1:18080", help="mock server base url")
     ap.add_argument("--n", type=int, default=500, help="number of requests")
-    ap.add_argument(
-        "--timeout", type=float, default=3.0, help="request timeout seconds"
-    )
+    ap.add_argument("--timeout", type=float, default=3.0, help="request timeout seconds")
     ap.add_argument("--warmup", type=int, default=20, help="warmup requests")
     ap.add_argument("--no-reset", action="store_true", help="do not reset server state")
     args = ap.parse_args()

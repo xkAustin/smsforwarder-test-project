@@ -4,8 +4,8 @@ import json
 import time
 import uuid
 from collections import deque
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, List, Optional
+from dataclasses import asdict, dataclass
+from typing import Any
 from urllib.parse import parse_qs, unquote_plus
 
 from fastapi import FastAPI, Request
@@ -18,11 +18,11 @@ class CapturedEvent:
     ts_ms: int
     method: str
     path: str
-    query: Dict[str, Any]
-    headers: Dict[str, str]
+    query: dict[str, Any]
+    headers: dict[str, str]
     body_raw: str
-    body_json: Optional[Any]
-    body_form: Optional[dict]
+    body_json: Any | None
+    body_form: dict | None
     response_status: int
 
 
@@ -52,15 +52,15 @@ def _safe_decode(b: bytes) -> str:
         return b.decode("utf-8", errors="replace")
 
 
-def _try_parse_json(text: str) -> Optional[Any]:
+def _try_parse_json(text: str) -> Any | None:
     try:
         return json.loads(text)
     except Exception:
         return None
 
 
-def _normalize_headers(h: Dict[str, str]) -> Dict[str, str]:
-    out: Dict[str, str] = {}
+def _normalize_headers(h: dict[str, str]) -> dict[str, str]:
+    out: dict[str, str] = {}
     for k, v in h.items():
         out[k.lower()] = v
     return out

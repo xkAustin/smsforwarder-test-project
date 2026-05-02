@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple, Optional
-from urllib.parse import parse_qs
 import json
+from typing import Any
+from urllib.parse import parse_qs
 
 
 def parse_event_body(
-    event: Dict[str, Any],
-) -> Tuple[str, Optional[Dict[str, Any]], Dict[str, str]]:
+    event: dict[str, Any],
+) -> tuple[str, dict[str, Any] | None, dict[str, str]]:
     """
     返回:
       - body_text: 方便直接包含断言的“文本视图”

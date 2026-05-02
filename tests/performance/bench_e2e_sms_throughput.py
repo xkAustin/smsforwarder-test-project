@@ -3,25 +3,15 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from typing import Optional, Dict, Any
+from typing import Any
+
 import pytest
 import requests
 
+from tests.utils.api_client import full_reset as reset
 from tools.adb.adb_client import AdbClient
 
 pytestmark = [pytest.mark.e2e, pytest.mark.performance]
-
-
-def reset(mock_base: str, timeout: float) -> None:
-    requests.post(f"{mock_base}/reset", timeout=timeout).raise_for_status()
-    try:
-        requests.post(f"{mock_base}/fault/reset", timeout=timeout).raise_for_status()
-    except requests.HTTPError as e:
-        # fault/reset might not exist in some versions of mock server; ignore 404/405
-        if e.response is not None and e.response.status_code in (404, 405):
-            pass
-        else:
-            raise
 
 
 def get_count(mock_base: str, timeout: float) -> int:
@@ -30,9 +20,7 @@ def get_count(mock_base: str, timeout: float) -> int:
     return r.json()["count"]
 
 
-def wait_until_count(
-    mock_base: str, timeout: float, target: int, wait_s: float
-) -> bool:
+def wait_until_count(mock_base: str, timeout: float, target: int, wait_s: float) -> bool:
     end = time.time() + wait_s
     while time.time() < end:
         if get_count(mock_base, timeout) >= target:
@@ -60,19 +48,15 @@ def trigger_adb_sms(serial: str, n: int, marker: str) -> None:
     """
     adb = AdbClient(serial=serial)
     for i in range(n):
-        msg = f"{marker} #{i} {int(time.time()*1000)}"
+        msg = f"{marker} #{i} {int(time.time() * 1000)}"
         r = adb.send_sms("10086", msg)
         if r.returncode != 0:
             raise RuntimeError(f"adb send_sms failed (serial={serial}): {r.stderr}")
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="E2E throughput benchmark (device optional)"
-    )
-    ap.add_argument(
-        "--mock-base", default="http://127.0.0.1:18080", help="mock server base url"
-    )
+    ap = argparse.ArgumentParser(description="E2E throughput benchmark (device optional)")
+    ap.add_argument("--mock-base", default="http://127.0.0.1:18080", help="mock server base url")
     ap.add_argument("--timeout", type=float, default=3.0, help="http timeout seconds")
     ap.add_argument("--n", type=int, default=30, help="number of events to trigger")
     ap.add_argument(
@@ -98,7 +82,7 @@ def main():
 
     before = get_count(args.mock_base, args.timeout)
 
-    used_serial: Optional[str] = None
+    used_serial: str | None = None
 
     t0 = time.perf_counter()
 
@@ -133,7 +117,7 @@ def main():
 
     t1 = time.perf_counter()
 
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "mock_base": args.mock_base,
         "trigger": args.trigger,
         "adb_serial": used_serial,

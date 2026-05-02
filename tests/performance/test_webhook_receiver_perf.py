@@ -1,7 +1,7 @@
 import pytest
 
-from tests.performance.bench_webhook_receiver import reset, run
-
+from tests.performance.bench_webhook_receiver import run
+from tests.utils.api_client import full_reset as reset
 
 pytestmark = pytest.mark.performance
 

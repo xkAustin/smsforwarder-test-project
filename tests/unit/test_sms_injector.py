@@ -1,59 +1,57 @@
-import unittest
-from unittest.mock import patch, MagicMock
-from tools.adb.sms_injector import inject_sms
 import shlex
+from unittest.mock import MagicMock, patch
 
-class TestSMSInjectorSecurity(unittest.TestCase):
-    @patch('subprocess.run')
-    def test_ssh_injection(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+import pytest
 
-        serial = "emulator-5554"
-        phone = "123456"
-        text = "hello; touch /tmp/vulnerable"
-        ssh_host = "user@remote"
+from tools.adb.sms_injector import inject_sms
 
-        inject_sms(serial, phone, text, mode="ssh", ssh_host=ssh_host)
+pytestmark = pytest.mark.unit
 
-        # Check what was passed to subprocess.run
-        args, _ = mock_run.call_args
-        cmd = args[0]
 
-        remote_cmd = cmd[2]
-        self.assertIn("'hello; touch /tmp/vulnerable'", remote_cmd, "The payload should be quoted")
+@patch("subprocess.run")
+def test_ssh_injection(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
-    @patch('subprocess.run')
-    def test_ssh_injection_with_quotes(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    serial = "emulator-5554"
+    phone = "123456"
+    text = "hello; touch /tmp/vulnerable"
+    ssh_host = "user@remote"
 
-        serial = "emulator-5554"
-        phone = "123456"
-        text = "hello'world; touch /tmp/vulnerable"
-        ssh_host = "user@remote"
+    inject_sms(serial, phone, text, mode="ssh", ssh_host=ssh_host)
 
-        inject_sms(serial, phone, text, mode="ssh", ssh_host=ssh_host)
+    args, _ = mock_run.call_args
+    cmd = args[0]
 
-        # Check what was passed to subprocess.run
-        args, _ = mock_run.call_args
-        cmd = args[0]
+    remote_cmd = cmd[2]
+    assert "'hello; touch /tmp/vulnerable'" in remote_cmd, "The payload should be quoted"
 
-        remote_cmd = cmd[2]
 
-        # shlex.join should handle single quotes correctly
-        # If we split it back with shlex, we should get the original adb_cmd.
+@patch("subprocess.run")
+def test_ssh_injection_with_quotes(mock_run):
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
-        parts = shlex.split(remote_cmd)
-        self.assertEqual(parts[-1], text)
+    serial = "emulator-5554"
+    phone = "123456"
+    text = "hello'world; touch /tmp/vulnerable"
+    ssh_host = "user@remote"
 
-    def test_ssh_mode_missing_host(self):
-        with self.assertRaises(ValueError) as cm:
-            inject_sms("serial", "123456", "text", mode="ssh", ssh_host=None)
-        self.assertEqual(str(cm.exception), "ssh_host is required when mode=ssh")
+    inject_sms(serial, phone, text, mode="ssh", ssh_host=ssh_host)
 
-    def test_unknown_mode(self):
-        with self.assertRaises(ValueError) as cm:
-            inject_sms("serial", "123456", "text", mode="invalid")
-        self.assertIn("unknown mode: invalid", str(cm.exception))
+    args, _ = mock_run.call_args
+    cmd = args[0]
 
-if __name__ == "__main__":
-    unittest.main()
+    remote_cmd = cmd[2]
+    parts = shlex.split(remote_cmd)
+    assert parts[-1] == text
+
+
+def test_ssh_mode_missing_host():
+    with pytest.raises(ValueError) as exc_info:
+        inject_sms("serial", "123456", "text", mode="ssh", ssh_host=None)
+    assert str(exc_info.value) == "ssh_host is required when mode=ssh"
+
+
+def test_unknown_mode():
+    with pytest.raises(ValueError) as exc_info:
+        inject_sms("serial", "123456", "text", mode="invalid")
+    assert "unknown mode: invalid" in str(exc_info.value)

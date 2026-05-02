@@ -1,34 +1,38 @@
-import unittest
 from unittest.mock import patch
-from tools.adb.sms_injector import inject_sms, CmdResult
 
-class TestSMSInjectorMac(unittest.TestCase):
-    @patch('tools.adb.sms_injector._run')
-    def test_mac_cmd_mode_default(self, mock_run):
-        mock_run.return_value = CmdResult(0, "success", "")
+import pytest
 
-        serial = "emulator-5554"
-        phone = "123456"
-        text = "hello"
+from tools.adb.sms_injector import CmdResult, inject_sms
 
-        inject_sms(serial, phone, text, mode="mac_cmd")
+pytestmark = pytest.mark.unit
 
-        expected_cmd = ["mac", "adb", "-s", serial, "emu", "sms", "send", phone, text]
-        mock_run.assert_called_once_with(expected_cmd)
 
-    @patch('tools.adb.sms_injector._run')
-    def test_mac_cmd_mode_custom(self, mock_run):
-        mock_run.return_value = CmdResult(0, "success", "")
+@patch("tools.adb.sms_injector._run")
+def test_mac_cmd_mode_default(mock_run):
+    mock_run.return_value = CmdResult(0, "success", "")
 
-        serial = "emulator-5554"
-        phone = "123456"
-        text = "hello"
-        custom_mac = "/usr/local/bin/mac-orb"
+    inject_sms("emulator-5554", "123456", "hello", mode="mac_cmd")
 
-        inject_sms(serial, phone, text, mode="mac_cmd", mac_cmd=custom_mac)
+    expected_cmd = ["mac", "adb", "-s", "emulator-5554", "emu", "sms", "send", "123456", "hello"]
+    mock_run.assert_called_once_with(expected_cmd)
 
-        expected_cmd = [custom_mac, "adb", "-s", serial, "emu", "sms", "send", phone, text]
-        mock_run.assert_called_once_with(expected_cmd)
 
-if __name__ == "__main__":
-    unittest.main()
+@patch("tools.adb.sms_injector._run")
+def test_mac_cmd_mode_custom(mock_run):
+    mock_run.return_value = CmdResult(0, "success", "")
+
+    custom_mac = "/usr/local/bin/mac-orb"
+    inject_sms("emulator-5554", "123456", "hello", mode="mac_cmd", mac_cmd=custom_mac)
+
+    expected_cmd = [
+        custom_mac,
+        "adb",
+        "-s",
+        "emulator-5554",
+        "emu",
+        "sms",
+        "send",
+        "123456",
+        "hello",
+    ]
+    mock_run.assert_called_once_with(expected_cmd)

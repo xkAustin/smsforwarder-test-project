@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional
 
 
 @dataclass
@@ -29,7 +28,7 @@ class AdbClient:
     - 兼容接口：list_devices() / send_sms()
     """
 
-    def __init__(self, serial: Optional[str] = None):
+    def __init__(self, serial: str | None = None):
         self.serial = serial
 
     def _cmd(self, *args: str) -> list[str]:
@@ -59,13 +58,13 @@ class AdbClient:
         """
         return self.list_devices_raw()
 
-    def get_devices(self) -> List[AdbDevice]:
+    def get_devices(self) -> list[AdbDevice]:
         r = self.list_devices_raw()
         if r.returncode != 0:
             raise RuntimeError(f"adb devices failed: {r.stderr}")
 
         lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
-        out: List[AdbDevice] = []
+        out: list[AdbDevice] = []
         for ln in lines[1:]:
             parts = ln.split()
             if len(parts) < 2:

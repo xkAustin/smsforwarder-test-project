@@ -1,33 +1,15 @@
-import time
-import requests
+import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 
-def get_events(base_url: str, limit=10):
-    r = requests.get(f"{base_url}/events", params={"limit": limit}, timeout=3)
-    r.raise_for_status()
-    return r.json()
-
-
-def test_webhook_receive_json_body(mock_base, mock_reset):
-    """
-    验证：
-    - webhook 能收到 POST 请求
-    - JSON body 能被正确解析
-    """
-
-    # 模拟一次“转发请求”
+def test_webhook_receive_json_body(mock_api, mock_reset):
     payload = {"msg": "pytest", "level": "info"}
-    r = requests.post(
-        f"{mock_base}/webhook",
-        json=payload,
-        timeout=3,
-    )
-    r.raise_for_status()
+    mock_api.post_webhook(json=payload)
 
-    # 给 server 一点处理时间（真实场景是异步）
-    time.sleep(0.2)
+    assert mock_api.wait_for_count(1), "timed out waiting for webhook event"
 
-    data = get_events(mock_base, limit=5)
+    data = mock_api.list_events(limit=5)
 
     assert data["count"] == 1
     event = data["items"][0]
@@ -35,9 +17,7 @@ def test_webhook_receive_json_body(mock_base, mock_reset):
     assert event["method"] == "POST"
     assert event["path"] == "/webhook"
 
-    # Header 断言
     headers = event["headers"]
     assert headers["content-type"].startswith("application/json")
 
-    # Body 断言
     assert event["body_json"] == payload

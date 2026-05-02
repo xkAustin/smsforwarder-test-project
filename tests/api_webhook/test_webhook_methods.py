@@ -4,6 +4,7 @@ SmsForwarder webhook supports GET (query params), POST/PUT/PATCH (JSON/form),
 custom headers, HMAC-SHA256 signing, and Basic Auth. These tests validate
 the mock server correctly captures all these protocol variations.
 """
+
 from __future__ import annotations
 
 import base64
@@ -12,30 +13,23 @@ import hmac
 import time
 import urllib.parse
 
-import requests
+import pytest
 
-
-def get_events(base_url: str, limit: int = 10):
-    r = requests.get(f"{base_url}/events", params={"limit": limit}, timeout=3)
-    r.raise_for_status()
-    return r.json()
-
+pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 # ── HTTP method variety ──────────────────────────────────────────
 
 
-def test_webhook_get_with_query_params(mock_base, mock_reset):
-    """GET /webhook?from=13800138000&content=test&timestamp=123&sign=abc"""
+def test_webhook_get_with_query_params(mock_api, mock_reset):
     params = {
         "from": "13800138000",
         "content": "test sms body",
         "timestamp": str(int(time.time())),
         "sign": "fake-signature",
     }
-    r = requests.get(f"{mock_base}/webhook", params=params, timeout=3)
-    assert r.status_code == 200
+    mock_api.get_webhook(params=params)
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     assert events["count"] == 1
     event = events["items"][0]
     assert event["method"] == "GET"
@@ -44,52 +38,45 @@ def test_webhook_get_with_query_params(mock_base, mock_reset):
     assert "sign" in event["query"]
 
 
-def test_webhook_put_json(mock_base, mock_reset):
-    """PUT /webhook with JSON body."""
-    payload = {"msg": "put-test", "level": "warn"}
-    r = requests.put(f"{mock_base}/webhook", json=payload, timeout=3)
-    assert r.status_code == 200
+@pytest.mark.parametrize(
+    "send, method, payload",
+    [
+        (
+            lambda api: api.put_webhook(json={"msg": "put-test", "level": "warn"}),
+            "PUT",
+            {"msg": "put-test", "level": "warn"},
+        ),
+        (
+            lambda api: api.patch_webhook(json={"msg": "patch-test"}),
+            "PATCH",
+            {"msg": "patch-test"},
+        ),
+        (
+            lambda api: api.delete_webhook(),
+            "DELETE",
+            None,
+        ),
+    ],
+)
+def test_webhook_json_methods(mock_api, mock_reset, send, method, payload):
+    send(mock_api)
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     assert events["count"] == 1
     event = events["items"][0]
-    assert event["method"] == "PUT"
-    assert event["body_json"] == payload
-
-
-def test_webhook_patch_json(mock_base, mock_reset):
-    """PATCH /webhook with JSON body."""
-    payload = {"msg": "patch-test"}
-    r = requests.patch(f"{mock_base}/webhook", json=payload, timeout=3)
-    assert r.status_code == 200
-
-    events = get_events(mock_base)
-    assert events["count"] == 1
-    event = events["items"][0]
-    assert event["method"] == "PATCH"
-    assert event["body_json"] == payload
-
-
-def test_webhook_delete(mock_base, mock_reset):
-    """DELETE /webhook — should be captured like any other method."""
-    r = requests.delete(f"{mock_base}/webhook", timeout=3)
-    assert r.status_code == 200
-
-    events = get_events(mock_base)
-    assert events["count"] == 1
-    assert events["items"][0]["method"] == "DELETE"
+    assert event["method"] == method
+    if payload is not None:
+        assert event["body_json"] == payload
 
 
 # ── Form-encoded content ─────────────────────────────────────────
 
 
-def test_webhook_form_urlencoded(mock_base, mock_reset):
-    """SmsForwarder default: x-www-form-urlencoded with from/content/timestamp."""
+def test_webhook_form_urlencoded(mock_api, mock_reset):
     form = {"from": "10086", "content": "form test message", "timestamp": "0"}
-    r = requests.post(f"{mock_base}/webhook", data=form, timeout=3)
-    assert r.status_code == 200
+    mock_api.post_webhook(data=form)
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     event = events["items"][0]
     assert event["method"] == "POST"
     assert event["body_form"] is not None
@@ -100,21 +87,14 @@ def test_webhook_form_urlencoded(mock_base, mock_reset):
 # ── Custom headers ───────────────────────────────────────────────
 
 
-def test_webhook_custom_headers(mock_base, mock_reset):
-    """SmsForwarder allows custom headers; verify they are captured."""
+def test_webhook_custom_headers(mock_api, mock_reset):
     custom = {
         "X-Custom-Header": "custom-value",
         "X-Another": "another-value",
     }
-    r = requests.post(
-        f"{mock_base}/webhook",
-        json={"test": True},
-        headers=custom,
-        timeout=3,
-    )
-    assert r.status_code == 200
+    mock_api.post_webhook(json={"test": True}, headers=custom)
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     headers = events["items"][0]["headers"]
     assert headers["x-custom-header"] == "custom-value"
     assert headers["x-another"] == "another-value"
@@ -123,8 +103,7 @@ def test_webhook_custom_headers(mock_base, mock_reset):
 # ── HMAC-SHA256 signature simulation ─────────────────────────────
 
 
-def test_webhook_with_hmac_signature(mock_base, mock_reset):
-    """Simulate what SmsForwarder sends: timestamp + HMAC-SHA256 sign in URL."""
+def test_webhook_with_hmac_signature(mock_api, mock_reset):
     secret = b"test-secret-key"
     timestamp = str(int(time.time()))
     string_to_sign = f"{timestamp}\n{secret.decode()}"
@@ -138,10 +117,9 @@ def test_webhook_with_hmac_signature(mock_base, mock_reset):
         "timestamp": timestamp,
         "sign": sign,
     }
-    r = requests.get(f"{mock_base}/webhook", params=params, timeout=3)
-    assert r.status_code == 200
+    mock_api.get_webhook(params=params)
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     event = events["items"][0]
     assert event["query"]["timestamp"] == timestamp
     assert event["query"]["sign"] == sign
@@ -150,17 +128,13 @@ def test_webhook_with_hmac_signature(mock_base, mock_reset):
 # ── Basic Auth simulation ────────────────────────────────────────
 
 
-def test_webhook_basic_auth_header(mock_base, mock_reset):
-    """SmsForwarder supports Basic Auth; verify Authorization header captured."""
-    r = requests.post(
-        f"{mock_base}/webhook",
+def test_webhook_basic_auth_header(mock_api, mock_reset):
+    mock_api.post_webhook(
         json={"auth": "test"},
         headers={"Authorization": "Basic dXNlcjpwYXNz"},
-        timeout=3,
     )
-    assert r.status_code == 200
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     headers = events["items"][0]["headers"]
     assert headers["authorization"] == "Basic dXNlcjpwYXNz"
 
@@ -168,24 +142,19 @@ def test_webhook_basic_auth_header(mock_base, mock_reset):
 # ── Unicode and encoding ─────────────────────────────────────────
 
 
-def test_webhook_chinese_content(mock_base, mock_reset):
-    """SmsForwarder handles Chinese SMS; verify UTF-8 content captured correctly."""
+def test_webhook_chinese_content(mock_api, mock_reset):
     payload = {"content": "你好世界 🌍 テスト"}
-    r = requests.post(f"{mock_base}/webhook", json=payload, timeout=3)
-    assert r.status_code == 200
+    mock_api.post_webhook(json=payload)
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     event = events["items"][0]
-    # Raw body has JSON-escaped unicode (ensure_ascii default); check parsed JSON
     assert event["body_json"]["content"] == "你好世界 🌍 テスト"
 
 
-def test_webhook_empty_body(mock_base, mock_reset):
-    """POST with no body at all."""
-    r = requests.post(f"{mock_base}/webhook", timeout=3)
-    assert r.status_code == 200
+def test_webhook_empty_body(mock_api, mock_reset):
+    mock_api.post_webhook()
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     event = events["items"][0]
     assert event["method"] == "POST"
     assert event["body_raw"] == ""
@@ -195,13 +164,7 @@ def test_webhook_empty_body(mock_base, mock_reset):
 # ── Template variable simulation ─────────────────────────────────
 
 
-def test_webhook_simulated_template_vars(mock_base, mock_reset):
-    """Simulate SmsForwarder template substitution: [from], [content], etc.
-
-    When smsTemplate is configured, SmsForwarder replaces tags like
-    [from], [content], [receive_time], [device_mark], [app_version],
-    [card_slot], [org_content] in the webhook params.
-    """
+def test_webhook_simulated_template_vars(mock_api, mock_reset):
     form = {
         "from": "13900001111",
         "content": "Balance: 123.45 CNY",
@@ -210,10 +173,9 @@ def test_webhook_simulated_template_vars(mock_base, mock_reset):
         "app_version": "3.3.3",
         "card_slot": "SIM1_ChinaMobile",
     }
-    r = requests.post(f"{mock_base}/webhook", data=form, timeout=3)
-    assert r.status_code == 200
+    mock_api.post_webhook(data=form)
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     event = events["items"][0]
     assert event["body_form"] is not None
     f = event["body_form"]

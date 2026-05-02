@@ -1,63 +1,45 @@
 """Regression tests for mock server internals.
 
 These tests validate:
-- /events/{event_id} endpoint (never tested before)
+- /events/{event_id} endpoint
 - Event ID uniqueness
 - Deque max bound (MAX_EVENTS = 5000)
 - Response schema consistency for all endpoints
 - Health endpoint after fault injection
 """
+
 from __future__ import annotations
 
-import requests
+import pytest
 
-
-def get_events(base_url: str, limit: int = 10):
-    r = requests.get(f"{base_url}/events", params={"limit": limit}, timeout=3)
-    r.raise_for_status()
-    return r.json()
-
-
-def post_ok(base_url: str, path: str, **kwargs):
-    r = requests.post(f"{base_url}{path}", timeout=3, **kwargs)
-    r.raise_for_status()
-    return r.json()
-
+pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 # ── /events/{event_id} ───────────────────────────────────────────
 
 
-def test_get_event_by_id(mock_base, mock_reset):
-    """GET /events/{event_id} returns the correct event."""
-    r = requests.post(f"{mock_base}/webhook", json={"test": "find-me"}, timeout=3)
-    r.raise_for_status()
+def test_get_event_by_id(mock_api, mock_reset):
+    r = mock_api.post_webhook(json={"test": "find-me"})
     event_id = r.json()["id"]
 
-    r2 = requests.get(f"{mock_base}/events/{event_id}", timeout=3)
-    assert r2.status_code == 200
-    event = r2.json()
+    event = mock_api.get_event(event_id)
     assert event["id"] == event_id
     assert event["body_json"] == {"test": "find-me"}
 
 
-def test_get_event_by_id_not_found(mock_base, mock_reset):
-    """GET /events/{event_id} returns 404 for non-existent id."""
-    r = requests.get(f"{mock_base}/events/nonexistent-uuid-12345", timeout=3)
+def test_get_event_by_id_not_found(mock_api, mock_reset):
+    r = mock_api._request_raw("GET", "/events/nonexistent-uuid-12345")
     assert r.status_code == 404
     data = r.json()
-    assert "error" in data
-    assert data["error"] == "not_found"
+    assert data.get("error") == "not_found"
 
 
 # ── Event ID uniqueness ──────────────────────────────────────────
 
 
-def test_event_id_unique(mock_base, mock_reset):
-    """Each event gets a unique UUID."""
+def test_event_id_unique(mock_api, mock_reset):
     ids = set()
     for i in range(20):
-        r = requests.post(f"{mock_base}/webhook", json={"i": i}, timeout=3)
-        r.raise_for_status()
+        r = mock_api.post_webhook(json={"i": i})
         ids.add(r.json()["id"])
 
     assert len(ids) == 20, f"expected 20 unique IDs, got {len(ids)}"
@@ -66,18 +48,16 @@ def test_event_id_unique(mock_base, mock_reset):
 # ── Deque bounded correctly ──────────────────────────────────────
 
 
-def test_max_events_bound(mock_base):
-    """MAX_EVENTS = 5000; older events are evicted when full."""
-    requests.post(f"{mock_base}/reset", timeout=3)
+def test_max_events_bound(mock_api):
+    mock_api.reset()
 
-    total = 100  # Send more than default limit but less than MAX
+    total = 100
     for i in range(total):
-        requests.post(f"{mock_base}/webhook", json={"i": i}, timeout=3)
+        mock_api.post_webhook(json={"i": i})
 
-    events = get_events(mock_base, limit=total + 10)
+    events = mock_api.list_events(limit=total + 10)
     assert events["count"] == total
 
-    # All event IDs should be unique (no rollover corruption)
     ids = {e["id"] for e in events["items"]}
     assert len(ids) == len(events["items"]), "duplicate event IDs found"
 
@@ -85,34 +65,24 @@ def test_max_events_bound(mock_base):
 # ── Response schema ──────────────────────────────────────────────
 
 
-def test_webhook_response_schema(mock_base):
-    """POST /webhook response has expected fields."""
-    r = requests.post(f"{mock_base}/webhook", json={"test": True}, timeout=3)
-    assert r.status_code == 200
+def test_webhook_response_schema(mock_api):
+    r = mock_api.post_webhook(json={"test": True})
     data = r.json()
-    assert "ok" in data
-    assert "id" in data
     assert data["ok"] is True
     assert isinstance(data["id"], str)
     assert len(data["id"]) == 36  # UUID format
 
 
-def test_health_response_schema(mock_base):
-    """GET /health returns expected structure."""
-    r = requests.get(f"{mock_base}/health", timeout=3)
-    assert r.status_code == 200
-    data = r.json()
-    assert "ok" in data
-    assert "events" in data
+def test_health_response_schema(mock_api):
+    data = mock_api.health()
     assert data["ok"] is True
     assert isinstance(data["events"], int)
 
 
-def test_events_list_schema(mock_base, mock_reset):
-    """GET /events returns count + items list."""
-    requests.post(f"{mock_base}/webhook", json={"test": True}, timeout=3)
+def test_events_list_schema(mock_api, mock_reset):
+    mock_api.post_webhook(json={"test": True})
 
-    data = get_events(mock_base)
+    data = mock_api.list_events()
     assert "count" in data
     assert "items" in data
     assert isinstance(data["count"], int)
@@ -121,16 +91,24 @@ def test_events_list_schema(mock_base, mock_reset):
     assert len(data["items"]) >= 1
 
 
-def test_captured_event_schema(mock_base, mock_reset):
-    """Each captured event has all required fields."""
-    requests.post(f"{mock_base}/webhook", json={"test": True}, timeout=3)
+def test_captured_event_schema(mock_api, mock_reset):
+    mock_api.post_webhook(json={"test": True})
 
-    events = get_events(mock_base)
+    events = mock_api.list_events()
     event = events["items"][0]
 
-    required = ["id", "ts_ms", "method", "path", "query",
-                "headers", "body_raw", "body_json", "body_form",
-                "response_status"]
+    required = [
+        "id",
+        "ts_ms",
+        "method",
+        "path",
+        "query",
+        "headers",
+        "body_raw",
+        "body_json",
+        "body_form",
+        "response_status",
+    ]
     for field in required:
         assert field in event, f"missing field: {field}"
 
@@ -147,70 +125,56 @@ def test_captured_event_schema(mock_base, mock_reset):
 # ── Health check after fault injection ───────────────────────────
 
 
-def test_health_after_fault_injection(mock_base):
-    """Health stays ok even after configuring fault modes."""
-    post_ok(mock_base, "/fault/reset")
-    # Configure delay, then check health still responds
-    post_ok(mock_base, "/fault/config", params={"mode": "delay", "delay_ms": 5000})
+def test_health_after_fault_injection(mock_api):
+    mock_api.fault_reset()
+    mock_api.fault_config(mode="delay", delay_ms=100)
 
-    r = requests.get(f"{mock_base}/health", timeout=1)
-    assert r.status_code == 200
-    assert r.json()["ok"] is True
+    data = mock_api.health()
+    assert data["ok"] is True
 
-    # Reset faults
-    post_ok(mock_base, "/fault/reset")
+    mock_api.fault_reset()
 
 
 # ── Fault config bad mode ────────────────────────────────────────
 
 
-def test_fault_config_bad_mode_rejected(mock_base):
-    """fault/config rejects invalid mode strings."""
-    r = requests.post(
-        f"{mock_base}/fault/config",
+def test_fault_config_bad_mode_rejected(mock_api):
+    r = mock_api._request_raw(
+        "POST",
+        "/fault/config",
         params={"mode": "explode", "fail_count": 1},
-        timeout=3,
     )
     assert r.status_code == 400
-    data = r.json()
-    assert "error" in data
+    assert "error" in r.json()
 
 
 # ── Reset endpoint idempotency ───────────────────────────────────
 
 
-def test_reset_idempotent(mock_base):
-    """Multiple resets in a row should not fail."""
+def test_reset_idempotent(mock_api):
     for _ in range(3):
-        r = requests.post(f"{mock_base}/reset", timeout=3)
-        assert r.status_code == 200
-        assert r.json()["ok"] is True
+        data = mock_api.reset()
+        assert data["ok"] is True
 
-    # After resets, count should be 0
-    events = get_events(mock_base)
-    assert events["count"] == 0
+    assert mock_api.event_count() == 0
 
 
 # ── events?limit clamping ────────────────────────────────────────
 
 
-def test_events_limit_clamped(mock_base, mock_reset):
-    """The limit parameter is clamped to [1, 500]."""
-    # limit=0 should be clamped to 1
-    r = requests.get(f"{mock_base}/events", params={"limit": 0}, timeout=3)
+def test_events_limit_clamped(mock_api, mock_reset):
+    # limit=0 clamped to 1
+    r = mock_api._request_raw("GET", "/events", params={"limit": 0})
     assert r.status_code == 200
 
-    # limit=1000 should be clamped to 500
-    r = requests.get(f"{mock_base}/events", params={"limit": 1000}, timeout=3)
+    # limit=1000 clamped to 500
+    r = mock_api._request_raw("GET", "/events", params={"limit": 1000})
     assert r.status_code == 200
-    data = r.json()
-    assert len(data["items"]) <= 500
+    assert len(r.json()["items"]) <= 500
 
 
-def test_events_limit_negative(mock_base):
-    """Negative limit should be clamped to 1."""
-    r = requests.get(f"{mock_base}/events", params={"limit": -5}, timeout=3)
+def test_events_limit_negative(mock_api):
+    r = mock_api._request_raw("GET", "/events", params={"limit": -5})
     assert r.status_code == 200
     data = r.json()
-    # Should return at most 1 item when limit clamped to 1
     assert len(data["items"]) <= data["count"]

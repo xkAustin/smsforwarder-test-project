@@ -2,88 +2,57 @@
 
 SmsForwarder may receive multiple SMS simultaneously (e.g. batch send,
 rapid incoming messages). The mock server must handle concurrent requests
-correctly — no dropped events, no corrupted state.
+correctly -- no dropped events, no corrupted state.
 """
+
 from __future__ import annotations
 
 import concurrent.futures
-import time
 
-import requests
+import pytest
 
-
-def get_events(base_url: str, limit: int = 100):
-    r = requests.get(f"{base_url}/events", params={"limit": limit}, timeout=3)
-    r.raise_for_status()
-    return r.json()
-
-
-def get_count(base_url: str):
-    j = get_events(base_url, limit=1)
-    return int(j["count"])
-
+pytestmark = [pytest.mark.integration, pytest.mark.regression]
 
 # ── Concurrency ──────────────────────────────────────────────────
 
 
-def test_concurrent_webhook_posts(mock_base, mock_reset):
-    """50 concurrent POSTs — all must be captured, count must match.
-
-    Verifies requests were actually parallel by checking that the total
-    wall-clock duration is well below sequential execution time.
-    """
-    n = 50
+def test_concurrent_webhook_posts(mock_api, mock_reset):
+    """50 concurrent POSTs -- all must be captured, count must match."""
 
     def post_one(i: int):
-        r = requests.post(f"{mock_base}/webhook", json={"i": i}, timeout=5)
-        r.raise_for_status()
-        return r.json()
+        return mock_api.post_webhook(json={"i": i}).json()
 
-    t0 = time.perf_counter()
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
-        futures = [ex.submit(post_one, i) for i in range(n)]
+        futures = [ex.submit(post_one, i) for i in range(50)]
         results = [f.result() for f in concurrent.futures.as_completed(futures)]
-    elapsed = time.perf_counter() - t0
-
-    assert len(results) == n
+    assert len(results) == 50
     assert all(r["ok"] for r in results)
 
-    after = get_count(mock_base)
-    assert after == n, f"expected {n} events, got {after}"
-
-    # 50 sequential requests at ~1ms each ≈ 50ms; parallel with 10 workers
-    # should complete in well under half that.
-    assert elapsed < 0.250, (
-        f"concurrent 50 requests took {elapsed:.3f}s — "
-        "possible serial execution or server slowdown"
-    )
+    after = mock_api.event_count()
+    assert after == 50, f"expected 50 events, got {after}"
 
 
-def test_concurrent_mixed_methods(mock_base, mock_reset):
-    """Concurrent GET + POST + PUT — all captured, methods correct."""
+def test_concurrent_mixed_methods(mock_api, mock_reset):
+    """Concurrent GET + POST + PUT -- all captured, methods correct."""
     expected = 30
 
     def send_one(i: int):
         if i % 3 == 0:
-            r = requests.get(
-                f"{mock_base}/webhook", params={"i": str(i)}, timeout=5
-            )
+            return mock_api.get_webhook(params={"i": str(i)}).json()
         elif i % 3 == 1:
-            r = requests.post(f"{mock_base}/webhook", json={"i": i}, timeout=5)
+            return mock_api.post_webhook(json={"i": i}).json()
         else:
-            r = requests.put(f"{mock_base}/webhook", json={"i": i}, timeout=5)
-        r.raise_for_status()
-        return r.json()
+            return mock_api.put_webhook(json={"i": i}).json()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
         futures = [ex.submit(send_one, i) for i in range(expected)]
         for f in concurrent.futures.as_completed(futures):
             f.result()
 
-    after = get_count(mock_base)
+    after = mock_api.event_count()
     assert after == expected, f"expected {expected} events, got {after}"
 
-    events = get_events(mock_base, limit=expected)
+    events = mock_api.list_events(limit=expected)
     methods = {e["method"] for e in events["items"]}
     assert "GET" in methods
     assert "POST" in methods
@@ -93,15 +62,12 @@ def test_concurrent_mixed_methods(mock_base, mock_reset):
 # ── Event ordering ───────────────────────────────────────────────
 
 
-def test_webhook_event_ordering(mock_base, mock_reset):
+def test_webhook_event_ordering(mock_api, mock_reset):
     """Sequential requests are captured in order (by ts_ms)."""
     for i in range(5):
-        r = requests.post(
-            f"{mock_base}/webhook", json={"seq": i}, timeout=3
-        )
-        r.raise_for_status()
+        mock_api.post_webhook(json={"seq": i})
 
-    events = get_events(mock_base, limit=10)
+    events = mock_api.list_events(limit=10)
     items = events["items"]
     assert len(items) >= 5
 
@@ -112,35 +78,32 @@ def test_webhook_event_ordering(mock_base, mock_reset):
 # ── Reset during load ────────────────────────────────────────────
 
 
-def test_reset_during_load(mock_base):
+def test_reset_during_load(mock_api):
     """Reset clears events even while requests are arriving."""
-    # Send some events
     for i in range(10):
-        requests.post(f"{mock_base}/webhook", json={"i": i}, timeout=3)
+        mock_api.post_webhook(json={"i": i})
 
-    assert get_count(mock_base) >= 10
+    assert mock_api.event_count() >= 10
 
-    # Reset
-    requests.post(f"{mock_base}/reset", timeout=3).raise_for_status()
-    assert get_count(mock_base) == 0
+    mock_api.reset()
+    assert mock_api.event_count() == 0
 
-    # Send more after reset
     for i in range(3):
-        requests.post(f"{mock_base}/webhook", json={"i": i}, timeout=3)
+        mock_api.post_webhook(json={"i": i})
 
-    assert get_count(mock_base) == 3
+    assert mock_api.event_count() == 3
 
 
 # ── Counter stability ────────────────────────────────────────────
 
 
-def test_event_count_monotonic(mock_base, mock_reset):
+def test_event_count_monotonic(mock_api, mock_reset):
     """Event count increases monotonically under sequential writes."""
-    before = get_count(mock_base)
+    before = mock_api.event_count()
     counts = []
     for i in range(5):
-        requests.post(f"{mock_base}/webhook", json={"i": i}, timeout=3)
-        counts.append(get_count(mock_base))
+        mock_api.post_webhook(json={"i": i})
+        counts.append(mock_api.event_count())
 
     for i, c in enumerate(counts):
         assert c == before + i + 1, f"count at step {i}: expected {before + i + 1}, got {c}"

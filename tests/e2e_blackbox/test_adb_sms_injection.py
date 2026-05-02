@@ -1,4 +1,5 @@
 import pytest
+
 from tests.utils.http_payload import parse_event_body
 
 pytestmark = pytest.mark.e2e
@@ -6,13 +7,13 @@ pytestmark = pytest.mark.e2e
 
 @pytest.mark.e2e
 def test_e2e_sms_to_webhook(
-    event_trigger, mock_reset, mock_counter, wait_for_event, get_new_events
+    event_trigger, mock_reset, mock_api, wait_for_event, get_new_events
 ):
     """
     E2E-001: ADB 注入短信 -> SmsForwarder 命中规则 -> Webhook 转发可观测且内容包含 marker
     """
     # 1) 清空 mock server，获取 before
-    before = mock_counter()
+    before = mock_api.event_count()
 
     # 2) 注入短信（规则需匹配该 marker）
     marker = "[E2E] case-001"
@@ -32,9 +33,7 @@ def test_e2e_sms_to_webhook(
     # 5) 解码后断言
     body_text, body_json, form = parse_event_body(event)
 
-    assert (
-        marker in body_text
-    ), f"marker not found. body_text: {body_text!r}, form={form}"
+    assert marker in body_text, f"marker not found. body_text: {body_text!r}, form={form}"
 
     # 6）契约断言
     if form:

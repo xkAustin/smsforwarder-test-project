@@ -15,18 +15,30 @@ uv sync --frozen
 # Run all tests (skips e2e by default in CI)
 uv run pytest
 
+# Test tiers
+uv run pytest -m smoke              # fast critical checks (< 2s)
+uv run pytest tests/unit/           # unit tests only (no server needed)
+uv run pytest -m "not e2e"          # unit + API + integration + performance
+uv run pytest -m regression         # full suite excluding e2e
+
 # Run with specific markers
-uv run pytest -m e2e                                    # end-to-end (requires Android device/emulator)
-uv run pytest -m "not e2e"                              # unit + integration + api tests
-uv run pytest -m performance                            # performance/benchmark tests
-uv run pytest -m integration                            # integration tests (mock server only)
-uv run pytest -m manual                                 # manually-triggered tests
+uv run pytest -m e2e                # end-to-end (requires Android device/emulator)
+uv run pytest -m performance        # performance/benchmark tests
+uv run pytest -m manual             # manually-triggered tests
 
 # Run a specific test file or function
 uv run pytest tests/api_webhook/test_webhook_basic.py
 uv run pytest tests/api_webhook/test_webhook_basic.py::test_webhook_receive_json_body
 
-# Run with HTML report
+# Code quality
+uv run ruff check .                 # lint
+uv run ruff format .                # auto-format
+uv run ruff check --fix .           # auto-fix lint issues
+
+# Coverage
+uv run pytest --cov=tools --cov=tests/utils --cov-report=term-missing
+
+# HTML report
 uv run pytest --html=reports/report.html --self-contained-html
 
 # Docker-based test run
@@ -46,6 +58,9 @@ FastAPI app that captures webhook events into an in-memory deque (max 5000). Key
 - `POST /fault/config` — configure fault injection (mode=ok|fail|delay, fail_count, delay_ms)
 - `GET /health` — health check
 
+### Shared API Client (`tests/utils/api_client.py`)
+`MockApiClient` class wraps all mock server HTTP endpoints with typed methods — every test uses this instead of raw `requests` calls. Provides: `health()`, `reset()`, `list_events()`, `get_event()`, `event_count()`, `fault_reset()`, `fault_config()`, `post_webhook()`, `get_webhook()`, `put_webhook()`, `patch_webhook()`, `delete_webhook()`. Instantiated via the `mock_api` fixture.
+
 ### Test Trigger System (`tests/utils/trigger.py`)
 `EventTrigger` class routes event sending through configurable modes:
 - **http** — direct POST to mock server (default, most reliable)
@@ -62,10 +77,10 @@ Trigger mode is set via `TRIGGER_MODE` env var or `--trigger-mode` CLI flag.
 - `tests/api_webhook/` — Webhook API contract tests (8 files, 43 tests): HTTP methods (GET/POST/PUT/PATCH/DELETE), JSON/form/empty body, custom headers, HMAC-SHA256 signing, Basic Auth, Unicode, fault injection, security bounds, concurrency (50 threads), event ordering, retry behavior, mock server regression (schema, /events/{id}, deque bounds, idempotency)
 - `tests/e2e_blackbox/` — End-to-end tests (2 files, 3 tests): ADB injection → SmsForwarder → webhook verification
 - `tests/performance/` — Throughput and latency benchmarks (2 CLI tools + 2 smoke tests) for webhook receiver and e2e SMS flow
-- `tests/unit/` — Unit tests (4 files, 15 tests): ADB device selection, SMS injector security, mac_cmd mode, mock server _safe_decode
+- `tests/unit/` — Unit tests (5 files, 15 tests): ADB device selection, SMS injector security, mac_cmd mode, mock server _safe_decode, trigger utils
 
 ### Test Infrastructure (`tests/conftest.py`)
-Session-scoped fixture auto-starts the mock server (uvicorn) unless `NO_AUTO_MOCK_SERVER=1`. Key fixtures: `mock_base`, `mock_reset`, `mock_counter`, `wait_for_event`, `get_new_events`, `event_trigger`, `trigger_config`.
+Session-scoped fixture auto-starts the mock server (uvicorn) unless `NO_AUTO_MOCK_SERVER=1`. Key fixtures: `mock_api` (MockApiClient), `mock_base`, `mock_reset`, `wait_for_event`, `get_new_events`, `get_latest_event`, `event_trigger`, `trigger_config`.
 
 ### CI/CD
 - `.github/workflows/python-tests.yml` — runs on push/PR: builds, installs deps, runs full suite excluding e2e

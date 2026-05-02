@@ -1,17 +1,23 @@
+import logging
 import os
-import time
+import signal
 import socket
 import subprocess
-import signal
-import requests
+import time
+
 import pytest
+import requests
 
-from tools.adb.adb_client import AdbClient
+from tests.utils.api_client import MockApiClient
 from tests.utils.trigger import EventTrigger, TriggerConfig
+from tools.adb.adb_client import AdbClient
+
+test_logger = logging.getLogger("test")
 
 
-def _ensure_no_proxy(hosts: str) -> None:
-    targets = [h.strip() for h in hosts.split(",") if h.strip()]
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_no_proxy_fixture():
+    targets = ["127.0.0.1", "localhost"]
     for key in ("NO_PROXY", "no_proxy"):
         current = os.getenv(key, "")
         parts = [p.strip() for p in current.split(",") if p.strip()] if current else []
@@ -19,9 +25,7 @@ def _ensure_no_proxy(hosts: str) -> None:
             if host not in parts:
                 parts.append(host)
         os.environ[key] = ",".join(parts)
-
-
-_ensure_no_proxy("127.0.0.1,localhost")
+    yield
 
 
 def _wait_port(host: str, port: int, timeout: float = 10.0) -> None:
@@ -52,7 +56,7 @@ def _wait_health(url: str, timeout: float = 10.0) -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mock_webhook_server():
+def mock_webhook_server(_ensure_no_proxy_fixture):
     """
     CI / local unit tests: ensure mock webhook server is running.
     如果你本地已经手动启动了server，也可以用环境变量关掉自动启动。
@@ -174,6 +178,28 @@ def pytest_addoption(parser):
     )
 
 
+def _failure_msg(report):
+    if report.longrepr is None:
+        return "unknown"
+    if hasattr(report.longrepr, "reprcrash") and report.longrepr.reprcrash is not None:
+        return report.longrepr.reprcrash.message
+    return str(report.longrepr).split("\n")[0][:120]
+
+
+def pytest_runtest_logstart(nodeid, location):
+    test_logger.info("START  %s", nodeid)
+
+
+def pytest_runtest_logreport(report):
+    if report.when == "setup" and report.failed:
+        test_logger.error("FAIL   %s | setup | duration=%.3fs | %s", report.nodeid, report.duration, _failure_msg(report))
+    elif report.when == "call":
+        if report.failed:
+            test_logger.error("FAIL   %s | duration=%.3fs | %s", report.nodeid, report.duration, _failure_msg(report))
+        elif report.passed:
+            test_logger.info("PASS   %s | duration=%.3fs", report.nodeid, report.duration)
+
+
 @pytest.fixture(scope="session")
 def adb(request):
     serial = (request.config.getoption("--adb-serial") or "").strip()
@@ -215,51 +241,29 @@ def trigger_config(request):
 
 
 @pytest.fixture()
-def event_trigger(mock_base, trigger_config):
-    return EventTrigger(mock_base=mock_base, config=trigger_config)
+def mock_api(mock_base) -> MockApiClient:
+    return MockApiClient(base_url=mock_base)
 
 
-def _post_ok(url: str, *, timeout: float = 3.0) -> None:
-    r = requests.post(url, timeout=timeout)
-    r.raise_for_status()
-
-
-def _get_json(url: str, *, params=None, timeout: float = 3.0) -> dict:
-    r = requests.get(url, params=params, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+@pytest.fixture()
+def event_trigger(mock_base, trigger_config, mock_api):
+    return EventTrigger(mock_base=mock_base, config=trigger_config, api_client=mock_api)
 
 
 @pytest.fixture()
 def mock_reset(mock_base):
-    _post_ok(f"{mock_base}/reset", timeout=3)
+    from tests.utils.api_client import full_reset
 
-    try:
-        _post_ok(f"{mock_base}/fault/reset", timeout=3)
-    except requests.HTTPError as e:
-        status = e.response.status_code if e.response is not None else None
-        if status in (404, 405):
-            pass
-        else:
-            raise
-
+    full_reset(mock_base)
     yield
-
-
-def get_count(mock_base: str) -> int:
-    j = _get_json(f"{mock_base}/events", params={"limit": 1}, timeout=3)
-    return int(j["count"])
-
-
-@pytest.fixture()
-def mock_counter(mock_base):
-    return lambda: get_count(mock_base)
 
 
 @pytest.fixture()
 def get_latest_event(mock_base):
+    client = MockApiClient(base_url=mock_base)
+
     def _inner():
-        j = _get_json(f"{mock_base}/events", params={"limit": 1}, timeout=3)
+        j = client.list_events(limit=1)
         items = j.get("items", [])
         if not items:
             raise AssertionError("no events captured yet")
@@ -284,38 +288,28 @@ def wait_until(predicate, timeout_s=10.0, interval_s=0.2):
 
 @pytest.fixture()
 def wait_for_event(mock_base):
-    """
-    等待 events count 从 before_count 增加到 before_count + expected_delta。
-    默认 expected_delta=1。
-    """
+    client = MockApiClient(base_url=mock_base)
 
-    def _wait(
-        before_count: int, expected_delta: int = 1, timeout_s: float = 10.0
-    ) -> bool:
+    def _wait(before_count: int, expected_delta: int = 1, timeout_s: float = 10.0) -> bool:
         target = before_count + expected_delta
-        return wait_until(lambda: get_count(mock_base) >= target, timeout_s=timeout_s)
+        return wait_until(lambda: client.event_count() >= target, timeout_s=timeout_s)
 
     return _wait
 
 
 @pytest.fixture()
 def get_new_events(mock_base):
-    """
-    给定 before_count，返回一个函数：拉取新增事件列表（从旧 count 之后的新增部分）
-    注意：/events?limit=N 只返回最近 N 条（Mock Server 默认为 50，最大 500），
-    因此 limit 必须 >= 新增数量，否则会截断。
-    """
+    client = MockApiClient(base_url=mock_base)
 
     def _factory(before_count: int):
         def _inner(limit: int = 50):
-            j = _get_json(f"{mock_base}/events", params={"limit": limit}, timeout=3)
+            j = client.list_events(limit=limit)
             total = int(j["count"])
             new_count = total - int(before_count)
             if new_count <= 0:
                 return []
             items = j.get("items", [])
 
-            # 如果新增数量超过了 items 数量，说明 limit 不够导致被截断
             if new_count > len(items):
                 raise AssertionError(
                     f"new_count={new_count} exceeds fetched items={len(items)}. "

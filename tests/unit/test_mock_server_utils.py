@@ -5,12 +5,18 @@ from unittest.mock import MagicMock
 sys.modules["fastapi"] = MagicMock()
 sys.modules["fastapi.responses"] = MagicMock()
 
-from tools.mock_server.app import _safe_decode
+import pytest
+
+from tools.mock_server.app import _safe_decode  # noqa: E402
+
+pytestmark = pytest.mark.unit
+
 
 def test_safe_decode_valid_utf8():
     """Test _safe_decode with valid UTF-8 byte sequence."""
     data = b"hello world"
     assert _safe_decode(data) == "hello world"
+
 
 def test_safe_decode_invalid_utf8():
     """Test _safe_decode with invalid UTF-8 byte sequence."""
@@ -22,12 +28,14 @@ def test_safe_decode_invalid_utf8():
     assert result.startswith("hello ")
     assert result.endswith(" world")
 
+
 def test_safe_decode_mixed_sequences():
     """Test _safe_decode with mixed valid and invalid sequences."""
-    data = b"\xe4\xbd\xa0\xe5\xa5\xbd \xff" # "你好" in UTF-8 + invalid byte
+    data = b"\xe4\xbd\xa0\xe5\xa5\xbd \xff"  # "你好" in UTF-8 + invalid byte
     result = _safe_decode(data)
     assert result.startswith("你好")
     assert result.endswith("\ufffd")
+
 
 def test_safe_decode_empty_bytes():
     """Test _safe_decode with empty bytes."""

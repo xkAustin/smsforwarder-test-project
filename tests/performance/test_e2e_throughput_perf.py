@@ -1,13 +1,10 @@
 import pytest
 
-
 pytestmark = [pytest.mark.e2e, pytest.mark.performance]
 
 
-def test_e2e_throughput_smoke(
-    event_trigger, mock_reset, mock_counter, wait_for_event
-):
-    before = mock_counter()
+def test_e2e_throughput_smoke(event_trigger, mock_reset, mock_api, wait_for_event):
+    before = mock_api.event_count()
     marker = "[E2E] perf-smoke"
     payloads = [f"{marker} #{i}" for i in range(3)]
 

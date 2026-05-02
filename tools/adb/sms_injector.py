@@ -3,7 +3,6 @@ from __future__ import annotations
 import shlex
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -29,7 +28,7 @@ def inject_sms(
     text: str,
     mode: str = "local",
     mac_cmd: str = "mac",
-    ssh_host: Optional[str] = None,
+    ssh_host: str | None = None,
 ) -> CmdResult:
     """
     在隔离环境中注入短信的统一入口
