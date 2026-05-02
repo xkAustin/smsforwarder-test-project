@@ -11,7 +11,6 @@ def test_malformed_json_body(mock_base, mock_reset):
     Test that the server handles malformed JSON correctly.
     It should return 200 (as per current implementation) but body_json should be None.
     """
-    requests.post(f"{mock_base}/reset")
 
     malformed_json = "{'a': 1,}" # Invalid JSON (single quotes, trailing comma)
 
@@ -34,7 +33,6 @@ def test_large_payload(mock_base, mock_reset):
     """
     Test handling of large payloads.
     """
-    requests.post(f"{mock_base}/reset")
 
     # 500KB payload (to avoid potential memory issues in CI, but large enough to test)
     large_payload = {"data": "x" * 500 * 1024}
@@ -52,11 +50,11 @@ def test_large_payload(mock_base, mock_reset):
 
     assert event["body_json"]["data"] == large_payload["data"]
 
-def test_missing_content_type(mock_base, mock_reset):
+def test_empty_content_type(mock_base, mock_reset):
     """
-    Test request without Content-Type header.
+    Test request with an empty Content-Type header.
+    When Content-Type is empty, the server should still capture the raw body correctly.
     """
-    requests.post(f"{mock_base}/reset")
 
     payload = "some raw data"
 
@@ -76,5 +74,5 @@ def test_missing_content_type(mock_base, mock_reset):
     assert events["count"] == 1
     event = events["items"][0]
 
-    # Check that body is captured correctly even without JSON content type
+    # Check that body is captured correctly even with empty content type
     assert event["body_raw"] == payload

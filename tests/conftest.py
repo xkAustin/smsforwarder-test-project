@@ -82,9 +82,8 @@ def mock_webhook_server():
 
     proc = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
         stderr=subprocess.STDOUT,
-        text=True,
         env={**os.environ},
     )
 
@@ -92,8 +91,10 @@ def mock_webhook_server():
         _wait_port(host, port, timeout=12.0)
 
         if proc.poll() is not None:
-            output = proc.stdout.read() if proc.stdout else ""
-            raise RuntimeError(f"mock server exited early:\n{output}")
+            raise RuntimeError(
+                "mock server exited early — "
+                "run 'uv run python -m uvicorn tools.mock_server.app:app' manually to see startup errors"
+            )
 
         _wait_health(f"http://{host}:{port}/health", timeout=12.0)
 
@@ -105,41 +106,6 @@ def mock_webhook_server():
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
-
-
-def pick_adb_serial(prefer_emulator: bool = True) -> str:
-    """
-    自动选择一个可用 adb device（优先 emulator，其次真机）。
-    过滤掉 offline/unauthorized 等状态。
-    """
-    import subprocess
-
-    p = subprocess.run(["adb", "devices"], capture_output=True, text=True)
-    if p.returncode != 0:
-        raise RuntimeError(f"adb devices failed: {p.stderr}")
-
-    lines = [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
-    devs = []
-    for ln in lines[1:]:
-        parts = ln.split()
-        if len(parts) < 2:
-            continue
-        serial, state = parts[0], parts[1]
-        if state == "device":
-            devs.append(serial)
-
-    if not devs:
-        raise RuntimeError(
-            "no usable adb device found. "
-            "Make sure emulator/phone is connected and authorized (state should be 'device')."
-        )
-
-    if prefer_emulator:
-        for d in devs:
-            if AdbClient.is_emulator_serial(d):
-                return d
-
-    return devs[0]
 
 
 def pytest_addoption(parser):
@@ -212,7 +178,7 @@ def pytest_addoption(parser):
 def adb(request):
     serial = (request.config.getoption("--adb-serial") or "").strip()
     if not serial:
-        serial = pick_adb_serial(prefer_emulator=True)
+        serial = AdbClient().choose_serial(prefer_emulator=True)
 
     client = AdbClient(serial=serial)
 
