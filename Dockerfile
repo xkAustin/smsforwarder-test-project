@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*
 
-# 安装 uv（官方推荐方式之一：curl 安装）
+# 安装 uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
