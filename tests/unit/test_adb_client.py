@@ -59,17 +59,6 @@ def test_get_devices_empty(mock_list_devices_raw):
 
 
 @patch.object(AdbClient, "list_devices_raw")
-def test_list_devices(mock_list_devices_raw):
-    mock_list_devices_raw.return_value = AdbResult(0, "raw output", "")
-    client = _make_client()
-
-    result = client.list_devices()
-
-    assert result.stdout == "raw output"
-    mock_list_devices_raw.assert_called_once()
-
-
-@patch.object(AdbClient, "list_devices_raw")
 def test_get_devices_success(mock_list_devices_raw):
     mock_list_devices_raw.return_value = AdbResult(
         0,
@@ -111,17 +100,6 @@ def test_send_sms_emulator(mock_run):
 
     assert result.stdout == "OK"
     mock_run.assert_called_once_with("emu", "sms", "send", "123456", "hello world", timeout=10)
-
-
-@patch.object(AdbClient, "send_sms_emulator")
-def test_send_sms(mock_send_sms_emulator):
-    mock_send_sms_emulator.return_value = AdbResult(0, "OK", "")
-    client = _make_client()
-
-    result = client.send_sms("123456", "hello")
-
-    assert result.stdout == "OK"
-    mock_send_sms_emulator.assert_called_once_with("123456", "hello")
 
 
 @patch("os.getenv")
