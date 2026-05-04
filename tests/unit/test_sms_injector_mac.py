@@ -21,7 +21,7 @@ def test_mac_cmd_mode_default(mock_run):
 def test_mac_cmd_mode_custom(mock_run):
     mock_run.return_value = CmdResult(0, "success", "")
 
-    custom_mac = "/usr/local/bin/mac-orb"
+    custom_mac = "mac-orb"
     inject_sms("emulator-5554", "123456", "hello", mode="mac_cmd", mac_cmd=custom_mac)
 
     expected_cmd = [

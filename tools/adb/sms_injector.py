@@ -45,12 +45,16 @@ def inject_sms(
         return _run(adb_cmd)
 
     if mode == "mac_cmd":
+        if mac_cmd not in ["mac", "mac-orb"]:
+            raise ValueError(f"invalid mac_cmd: {mac_cmd}")
         return _run([mac_cmd, *adb_cmd])
 
     if mode == "ssh":
         if not ssh_host:
             raise ValueError("ssh_host is required when mode=ssh")
+        if ssh_host.startswith("-"):
+            raise ValueError(f"invalid ssh_host: {ssh_host}")
         remote = shlex.join(adb_cmd)
-        return _run(["ssh", ssh_host, remote])
+        return _run(["ssh", "--", ssh_host, remote])
 
     raise ValueError(f"unknown mode: {mode}")
