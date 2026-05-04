@@ -49,7 +49,7 @@ def trigger_adb_sms(serial: str, n: int, marker: str) -> None:
     adb = AdbClient(serial=serial)
     for i in range(n):
         msg = f"{marker} #{i} {int(time.time() * 1000)}"
-        r = adb.send_sms("10086", msg)
+        r = adb.send_sms_emulator("10086", msg)
         if r.returncode != 0:
             raise RuntimeError(f"adb send_sms failed (serial={serial}): {r.stderr}")
 

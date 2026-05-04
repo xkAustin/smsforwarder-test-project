@@ -25,7 +25,6 @@ class AdbClient:
     ADB 客户端封装（面向测试工程）：
     - 支持解析设备列表
     - 自动选择 serial（优先 emulator-<port> 格式的模拟器）
-    - 兼容接口：list_devices() / send_sms()
     """
 
     def __init__(self, serial: str | None = None):
@@ -51,12 +50,6 @@ class AdbClient:
 
     def list_devices_raw(self) -> AdbResult:
         return self.run("devices", "-l", timeout=10)
-
-    def list_devices(self) -> AdbResult:
-        """
-        兼容旧接口：返回 adb devices -l 的原始结果（AdbResult）
-        """
-        return self.list_devices_raw()
 
     def get_devices(self) -> list[AdbDevice]:
         r = self.list_devices_raw()
@@ -115,11 +108,3 @@ class AdbClient:
         emulator 专用：模拟收到短信
         """
         return self.run("emu", "sms", "send", phone, text, timeout=10)
-
-    def send_sms(self, phone: str, text: str) -> AdbResult:
-        """
-        兼容旧接口：
-        目前等同 send_sms_emulator（仅对 emulator 生效）。
-        后续如需支持真机，可在这里扩展策略。
-        """
-        return self.send_sms_emulator(phone, text)

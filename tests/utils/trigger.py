@@ -124,7 +124,9 @@ class EventTrigger:
                 if not allow_fail:
                     raise
                 return TriggerResult(
-                    mode="http", serial=None, used_fallback=False,
+                    mode="http",
+                    serial=None,
+                    used_fallback=False,
                     detail=f"json request failed: {exc}",
                 )
             return TriggerResult(mode="http", serial=None, used_fallback=False, detail="json")
@@ -136,7 +138,9 @@ class EventTrigger:
             if not allow_fail:
                 raise
             return TriggerResult(
-                mode="http", serial=None, used_fallback=False,
+                mode="http",
+                serial=None,
+                used_fallback=False,
                 detail=f"json request failed: {exc}",
             )
         return TriggerResult(mode="http", serial=None, used_fallback=False, detail="json")
@@ -151,7 +155,9 @@ class EventTrigger:
                 if not allow_fail:
                     raise
                 return TriggerResult(
-                    mode="http", serial=None, used_fallback=False,
+                    mode="http",
+                    serial=None,
+                    used_fallback=False,
                     detail=f"form request failed: {exc}",
                 )
             return TriggerResult(mode="http", serial=None, used_fallback=False, detail="form")
@@ -163,7 +169,9 @@ class EventTrigger:
             if not allow_fail:
                 raise
             return TriggerResult(
-                mode="http", serial=None, used_fallback=False,
+                mode="http",
+                serial=None,
+                used_fallback=False,
                 detail=f"form request failed: {exc}",
             )
         return TriggerResult(mode="http", serial=None, used_fallback=False, detail="form")
