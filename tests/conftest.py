@@ -192,10 +192,20 @@ def pytest_runtest_logstart(nodeid, location):
 
 def pytest_runtest_logreport(report):
     if report.when == "setup" and report.failed:
-        test_logger.error("FAIL   %s | setup | duration=%.3fs | %s", report.nodeid, report.duration, _failure_msg(report))
+        test_logger.error(
+            "FAIL   %s | setup | duration=%.3fs | %s",
+            report.nodeid,
+            report.duration,
+            _failure_msg(report),
+        )
     elif report.when == "call":
         if report.failed:
-            test_logger.error("FAIL   %s | duration=%.3fs | %s", report.nodeid, report.duration, _failure_msg(report))
+            test_logger.error(
+                "FAIL   %s | duration=%.3fs | %s",
+                report.nodeid,
+                report.duration,
+                _failure_msg(report),
+            )
         elif report.passed:
             test_logger.info("PASS   %s | duration=%.3fs", report.nodeid, report.duration)
 
@@ -209,7 +219,7 @@ def adb(request):
     client = AdbClient(serial=serial)
 
     # 设备不在线就直接报错
-    devices = client.list_devices()
+    devices = client.list_devices_raw()
     if devices.returncode != 0:
         raise RuntimeError(f"adb devices failed: {devices.stderr}")
 

@@ -6,9 +6,7 @@ pytestmark = pytest.mark.e2e
 
 
 @pytest.mark.e2e
-def test_e2e_sms_to_webhook(
-    event_trigger, mock_reset, mock_api, wait_for_event, get_new_events
-):
+def test_e2e_sms_to_webhook(event_trigger, mock_reset, mock_api, wait_for_event, get_new_events):
     """
     E2E-001: ADB 注入短信 -> SmsForwarder 命中规则 -> Webhook 转发可观测且内容包含 marker
     """
