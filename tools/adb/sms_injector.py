@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -52,7 +53,10 @@ def inject_sms(
     if mode == "ssh":
         if not ssh_host:
             raise ValueError("ssh_host is required when mode=ssh")
-        if ssh_host.startswith("-"):
+        # Validate ssh_host to prevent command/argument injection.
+        # Allowed: alphanumeric, dots, hyphens, underscores, @, :, and square brackets (for IPv6).
+        # It must not start with a hyphen.
+        if not re.match(r"^[a-zA-Z0-9._@\[\]:-]+$", ssh_host) or ssh_host.startswith("-"):
             raise ValueError(f"invalid ssh_host: {ssh_host}")
         remote = shlex.join(adb_cmd)
         return _run(["ssh", "--", ssh_host, remote])
