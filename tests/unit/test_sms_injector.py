@@ -58,9 +58,30 @@ def test_unknown_mode():
 
 
 def test_ssh_host_validation():
+    # Test hyphen prefix
     with pytest.raises(ValueError) as exc_info:
         inject_sms("serial", "123456", "text", mode="ssh", ssh_host="-oProxyCommand=calc")
     assert "invalid ssh_host: -oProxyCommand=calc" in str(exc_info.value)
+
+    # Test spaces
+    with pytest.raises(ValueError) as exc_info:
+        inject_sms("serial", "123456", "text", mode="ssh", ssh_host="host1 host2")
+    assert "invalid ssh_host: host1 host2" in str(exc_info.value)
+
+    # Test semicolon (shell injection)
+    with pytest.raises(ValueError) as exc_info:
+        inject_sms("serial", "123456", "text", mode="ssh", ssh_host="host;id")
+    assert "invalid ssh_host: host;id" in str(exc_info.value)
+
+    # Test valid formats
+    with patch("tools.adb.sms_injector._run") as mock_run:
+        mock_run.return_value = MagicMock()
+        # username@host
+        inject_sms("serial", "123456", "text", mode="ssh", ssh_host="user@host-1.local")
+        # IPv6
+        inject_sms("serial", "123456", "text", mode="ssh", ssh_host="[2001:db8::1]")
+        # host:port
+        inject_sms("serial", "123456", "text", mode="ssh", ssh_host="localhost:2222")
 
 
 def test_mac_cmd_validation():
