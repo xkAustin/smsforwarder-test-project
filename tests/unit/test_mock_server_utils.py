@@ -7,7 +7,7 @@ sys.modules["fastapi.responses"] = MagicMock()
 
 import pytest
 
-from tools.mock_server.app import _safe_decode  # noqa: E402
+from tools.mock_server.app import _normalize_headers, _safe_decode, _try_parse_json  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
@@ -40,3 +40,45 @@ def test_safe_decode_mixed_sequences():
 def test_safe_decode_empty_bytes():
     """Test _safe_decode with empty bytes."""
     assert _safe_decode(b"") == ""
+
+
+def test_normalize_headers_mixed_case():
+    """Test _normalize_headers with mixed-case keys."""
+    headers = {"Content-Type": "application/json", "X-Request-ID": "123"}
+    expected = {"content-type": "application/json", "x-request-id": "123"}
+    assert _normalize_headers(headers) == expected
+
+
+def test_normalize_headers_empty():
+    """Test _normalize_headers with empty dictionary."""
+    assert _normalize_headers({}) == {}
+
+
+def test_normalize_headers_already_lowercase():
+    """Test _normalize_headers with already lowercase keys."""
+    headers = {"content-type": "application/json", "accept": "*/*"}
+    assert _normalize_headers(headers) == headers
+
+
+def test_normalize_headers_uppercase():
+    """Test _normalize_headers with uppercase keys."""
+    headers = {"HOST": "localhost", "USER-AGENT": "test"}
+    expected = {"host": "localhost", "user-agent": "test"}
+    assert _normalize_headers(headers) == expected
+
+
+def test_try_parse_json_valid():
+    """Test _try_parse_json with valid JSON string."""
+    text = '{"a": 1, "b": [1, 2, 3]}'
+    assert _try_parse_json(text) == {"a": 1, "b": [1, 2, 3]}
+
+
+def test_try_parse_json_invalid():
+    """Test _try_parse_json with invalid JSON string."""
+    assert _try_parse_json('{"a": 1,') is None
+    assert _try_parse_json("not json") is None
+
+
+def test_try_parse_json_empty():
+    """Test _try_parse_json with empty string."""
+    assert _try_parse_json("") is None
