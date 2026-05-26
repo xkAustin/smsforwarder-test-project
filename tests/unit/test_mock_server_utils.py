@@ -5,11 +5,64 @@ from unittest.mock import MagicMock
 sys.modules["fastapi"] = MagicMock()
 sys.modules["fastapi.responses"] = MagicMock()
 
-import pytest
+import pytest  # noqa: E402
 
-from tools.mock_server.app import _safe_decode  # noqa: E402
+from tools.mock_server.app import _normalize_headers, _safe_decode, _try_parse_json  # noqa: E402
 
 pytestmark = pytest.mark.unit
+
+
+def test_try_parse_json_valid_object():
+    """Test _try_parse_json with a valid JSON object."""
+    text = '{"key": "value", "int": 123}'
+    assert _try_parse_json(text) == {"key": "value", "int": 123}
+
+
+def test_try_parse_json_valid_list():
+    """Test _try_parse_json with a valid JSON list."""
+    text = '[1, "two", 3.0]'
+    assert _try_parse_json(text) == [1, "two", 3.0]
+
+
+def test_try_parse_json_valid_primitive():
+    """Test _try_parse_json with valid JSON primitives."""
+    assert _try_parse_json('"string"') == "string"
+    assert _try_parse_json("123") == 123
+    assert _try_parse_json("true") is True
+    assert _try_parse_json("null") is None
+
+
+def test_try_parse_json_invalid_json():
+    """Test _try_parse_json with invalid JSON."""
+    assert _try_parse_json('{"key": "value"') is None  # missing brace
+    assert _try_parse_json("not json") is None
+    assert _try_parse_json("") is None
+
+
+def test_normalize_headers_basic():
+    """Test _normalize_headers with basic case normalization."""
+    headers = {"Content-Type": "application/json", "X-Custom-Header": "Value"}
+    expected = {"content-type": "application/json", "x-custom-header": "value"}
+    # Wait, looking at the code:
+    # def _normalize_headers(h: dict[str, str]) -> dict[str, str]:
+    #     out: dict[str, str] = {}
+    #     for k, v in h.items():
+    #         out[k.lower()] = v
+    #     return out
+    # It only lowers the KEY, not the value.
+    expected = {"content-type": "application/json", "x-custom-header": "Value"}
+    assert _normalize_headers(headers) == expected
+
+
+def test_normalize_headers_already_lower():
+    """Test _normalize_headers with already lowercase keys."""
+    headers = {"host": "localhost", "user-agent": "test"}
+    assert _normalize_headers(headers) == headers
+
+
+def test_normalize_headers_empty():
+    """Test _normalize_headers with empty dict."""
+    assert _normalize_headers({}) == {}
 
 
 def test_safe_decode_valid_utf8():
