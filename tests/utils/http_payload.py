@@ -14,7 +14,8 @@ def parse_event_body(
       - body_json: 如果能解析为 JSON，则返回 dict，否则 None
       - form: 如果是 x-www-form-urlencoded，则返回扁平 dict，否则 {}
     """
-    headers = event.get("headers", {}) or {}
+    headers_raw = event.get("headers", {}) or {}
+    headers = {k.lower(): v for k, v in headers_raw.items()}
     ctype = (headers.get("content-type") or headers.get("content_type") or "").lower()
     raw = event.get("body_raw") or ""
 
