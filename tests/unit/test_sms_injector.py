@@ -76,3 +76,19 @@ def test_ssh_delimiter(mock_run):
     args, _ = mock_run.call_args
     cmd = args[0]
     assert cmd == ["ssh", "--", "myhost", "adb -s serial emu sms send 123456 text"]
+
+@patch("subprocess.run")
+def test_inject_sms_file_not_found(mock_run):
+    mock_run.side_effect = FileNotFoundError
+    result = inject_sms("serial", "123456", "text")
+    assert result.returncode == -1
+    assert "Command not found" in result.stderr
+
+
+@patch("subprocess.run")
+def test_inject_sms_timeout(mock_run):
+    import subprocess
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd=["adb"], timeout=20)
+    result = inject_sms("serial", "123456", "text")
+    assert result.returncode == -1
+    assert "Command timed out" in result.stderr
