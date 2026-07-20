@@ -1,5 +1,6 @@
+
 import pytest
-import json
+
 from tests.utils.http_payload import parse_event_body
 
 pytestmark = pytest.mark.unit
