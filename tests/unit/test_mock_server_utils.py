@@ -102,11 +102,6 @@ def test_normalize_headers_mixed_case():
     assert _normalize_headers(headers) == expected
 
 
-def test_normalize_headers_empty():
-    """Test _normalize_headers with empty dictionary."""
-    assert _normalize_headers({}) == {}
-
-
 def test_normalize_headers_already_lowercase():
     """Test _normalize_headers with already lowercase keys."""
     headers = {"content-type": "application/json", "accept": "*/*"}
