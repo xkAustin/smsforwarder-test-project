@@ -42,14 +42,6 @@ def test_try_parse_json_invalid_json():
 def test_normalize_headers_basic():
     """Test _normalize_headers with basic case normalization."""
     headers = {"Content-Type": "application/json", "X-Custom-Header": "Value"}
-    expected = {"content-type": "application/json", "x-custom-header": "value"}
-    # Wait, looking at the code:
-    # def _normalize_headers(h: dict[str, str]) -> dict[str, str]:
-    #     out: dict[str, str] = {}
-    #     for k, v in h.items():
-    #         out[k.lower()] = v
-    #     return out
-    # It only lowers the KEY, not the value.
     expected = {"content-type": "application/json", "x-custom-header": "Value"}
     assert _normalize_headers(headers) == expected
 
@@ -102,7 +94,7 @@ def test_normalize_headers_mixed_case():
     assert _normalize_headers(headers) == expected
 
 
-def test_normalize_headers_empty():
+def test_normalize_headers_empty_dict():
     """Test _normalize_headers with empty dictionary."""
     assert _normalize_headers({}) == {}
 
