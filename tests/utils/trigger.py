@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import requests
 
 from tools.adb.adb_client import AdbClient, AdbResult
-from tools.adb.sms_injector import CmdResult, inject_sms
+from tools.adb.sms_injector import inject_sms
 
 if TYPE_CHECKING:
     from tests.utils.api_client import MockApiClient
@@ -56,22 +56,6 @@ def _emulator_console_reachable(serial: str) -> bool:
 
 def _choose_adb_serial(prefer_emulator: bool = True) -> str:
     return AdbClient(serial=None).choose_serial(prefer_emulator=prefer_emulator)
-
-
-def _send_sms_emulator(
-    serial: str,
-    phone: str,
-    text: str,
-    config: TriggerConfig,
-) -> CmdResult:
-    return inject_sms(
-        serial=serial,
-        phone=phone,
-        text=text,
-        mode=config.sms_inject_mode,
-        mac_cmd=config.sms_inject_mac_cmd,
-        ssh_host=config.sms_inject_ssh_host or None,
-    )
 
 
 def _send_sms_device_best_effort(serial: str, phone: str, text: str) -> AdbResult:
@@ -222,7 +206,14 @@ class EventTrigger:
                 if self.config.mode == "adb" or self.config.strict:
                     raise RuntimeError(f"emulator console not reachable on serial {serial}")
                 return self._fallback_http(phone, text, "emulator console unreachable", allow_fail)
-            result = _send_sms_emulator(serial, phone, text, self.config)
+            result = inject_sms(
+                serial=serial,
+                phone=phone,
+                text=text,
+                mode=self.config.sms_inject_mode,
+                mac_cmd=self.config.sms_inject_mac_cmd,
+                ssh_host=self.config.sms_inject_ssh_host or None,
+            )
             if result.returncode == 0:
                 return TriggerResult(
                     mode="adb",
